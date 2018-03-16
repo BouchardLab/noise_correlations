@@ -65,7 +65,19 @@ def pair_el_discrim_value(responses,stim_1, stim_2, electrodes, n_samples = 40, 
     if adjust_volume:
         ### Think about volume factor
         volume_factor = np.sqrt(np.linalg.det(cov)/np.linalg.det(np.diag(np.diag(cov))))
-    value = np.dot((n2-n1).transpose(),np.dot(np.linalg.inv(cov),(n2-n1))) 
+    try:
+        value = np.dot((n2-n1).transpose(),np.dot(np.linalg.inv(cov),(n2-n1))) 
+    except:
+        print electrodes
+        print stim_1
+        print stim_2
+        print responses[:,electrodes,stim_1]
+        print n1
+        print responses[:,electrodes,stim_2]
+        print n2
+        print (n2-n1).shape
+        print (cov).shape
+        raise
     decor_value = np.dot((n2-n1).transpose(),np.dot(np.linalg.inv(np.diag(np.diag(cov*volume_factor))),(n2-n1)))
     return value, decor_value
 
@@ -81,11 +93,12 @@ def pair_el_discrim_value(responses,stim_1, stim_2, electrodes, n_samples = 40, 
 
 ##### Specify datasets and locations #####
 ##TODO: PARAMETERIZE
-rat_ids = ['R32_B7','R18_B12','R19_B11','R6_B10','R6_B12']
+
+rat_ids = ['R32_B7','R18_B12','R19_B11','R6_B10','R6_B16']
 rat_dir = "/Users/iMax/data/ToneAnalysisDatasets/"
 freq_bands = [u'B', u'G', u'HG', u'UHG', u'MUAR', u'Spk']
 
-##TODO: PARAMETERIZE
+#TODO: PARAMETERIZE
 rat_id = rat_ids[0] #this is where you would change the rat
 freq_band = freq_bands[3] #this is where we would change the high gamma
 
@@ -118,11 +131,11 @@ def extract_noise_correlation_dataset(rat_dir, rat_id, freq_band):
     #     os.makedirs(save_dir)
     # Create sub directory for each rat and frequency band
     #TODO: IS THIS DOING ANYTHING?
-    for dir_1 in rat_ids:
-        for dir_2 in freq_bands:
-            directory = 'results/' + dir_1 + '/' + dir_2 + '/runs/'
-            if not os.path.exists(directory):
-                os.makedirs(directory)
+    # for dir_1 in rat_ids:
+    #     for dir_2 in freq_bands:
+    #         directory = 'results/' + dir_1 + '/' + dir_2 + '/runs/'
+    #         if not os.path.exists(directory):
+    #             os.makedirs(directory)
 
 
     #specific electrode
@@ -329,7 +342,7 @@ def noise_correlation_analysis(final_response, bf_el, method, twnd, amp_set, frq
     # el_y = 99
     # stim_1 = 5
     # stim_2 = 17
-    ## add a print with fr_stim_vals[stim_1],fr_stim_vals[stim_2]
+    # # add a print with fr_stim_vals[stim_1],fr_stim_vals[stim_2]
     # axarr[0].scatter(x=focused_response[:,el_x,stim_1].flatten(),y=focused_response[:,el_y,stim_1].flatten(),c='red')
     # axarr[0].scatter(x=focused_response[:,el_x,stim_2].flatten(),y=focused_response[:,el_y,stim_2].flatten())
     # axarr[0].scatter(x=np.mean(focused_response[:,el_x,stim_1]),y=np.mean(focused_response[:,el_y,stim_1]),marker='x',s=200, c ='red')
@@ -366,10 +379,14 @@ def noise_correlation_analysis(final_response, bf_el, method, twnd, amp_set, frq
     discrim_y_decor_examp = []
     discrim_y_uncor_examp = []
     discrim_y_org_examp = []
+    org_y_examp = []
+    decor_y_examp = []
     count = 0
     pair_scores_dict = {}
     scores = []
     test_dict = {}
+    org_dict = {}
+    decor_dict = {}
     #electrode_combinations = [(0,1),(5,10),(3,100),(7,88)]
 
     # Select analysis method and associated paraeters
@@ -411,6 +428,8 @@ def noise_correlation_analysis(final_response, bf_el, method, twnd, amp_set, frq
 
         discrim_x_examp.append(float(j-i))
         discrim_y_examp.append(np.mean(np.array(org_score)-np.mean(np.array(decor_score))))
+        org_y_examp.append(np.mean(np.array(org_score)))
+        decor_y_examp.append(np.mean(np.array(decor_score)))
         if not pair_scores_dict.has_key(j-i):
             pair_scores_dict[j-i] = []
         pair_scores_dict[j-i].append([np.mean(np.array(org_score)),np.mean(np.array(decor_score)),np.array(org_score),np.array(decor_score)])
@@ -419,15 +438,32 @@ def noise_correlation_analysis(final_response, bf_el, method, twnd, amp_set, frq
         if not test_dict.has_key(j-i):
             test_dict[j-i] = []
         test_dict[j-i].append(np.mean(np.array(org_score)-np.array(decor_score)))
+        #Save org and decor values as a function of tuning difference
+        if not org_dict.has_key(j-i):
+            org_dict[j-i] = []
+        org_dict[j-i].append(np.mean(np.array(org_score)))
+        if not decor_dict.has_key(j-i):
+            decor_dict[j-i] = []
+        decor_dict[j-i].append(np.mean(np.array(decor_score)))
+
+
 
         discrim_y_decor_examp.append(np.mean(np.array(decor_score)))
         discrim_y_uncor_examp.append(np.mean(np.array(org_score)))
-    # plt.scatter(x = np.array(discrim_x_examp), y = np.array(discrim_y_examp))
-    # #plt.plot([i for i in pair_scores_dict],[np.mean(np.array(pair_scores_dict[i][0]) - np.array(pair_scores_dict[i][1])) for i in pair_scores_dict])
-    # plt.plot([i for i in test_dict],[np.mean(np.array(test_dict[i])) for i in test_dict])
-    # plt.axhline(0)
-    # plt.show()
-    # plt.savefig()
+    plt.scatter(x = np.array(discrim_x_examp), y = np.array(discrim_y_examp))
+    plt.scatter(x = np.array(discrim_x_examp), y = np.array(org_y_examp),color='g')
+    plt.scatter(x = np.array(discrim_x_examp), y = np.array(decor_y_examp),color='r')
+    #plt.plot([i for i in pair_scores_dict],[np.mean(np.array(pair_scores_dict[i][0]) - np.array(pair_scores_dict[i][1])) for i in pair_scores_dict])
+    #print [i for i in pair_scores_dict]
+    #print len(pair_scores_dict[1])
+    #print [np.mean(np.array(pair_scores_dict[i][0])) for i in pair_scores_dict]
+    #plt.plot([i for i in pair_scores_dict],[np.mean(np.array(pair_scores_dict[i][0])) for i in pair_scores_dict])
+    plt.plot([i for i in test_dict],[np.mean(np.array(test_dict[i])) for i in test_dict])
+    plt.plot([i for i in org_dict],[np.mean(np.array(org_dict[i])) for i in org_dict],'g')
+    plt.plot([i for i in decor_dict],[np.mean(np.array(decor_dict[i])) for i in decor_dict],'r')
+    plt.axhline(0)
+    plt.show()
+    plt.savefig()
     print count
     scores = np.array(scores)
 
