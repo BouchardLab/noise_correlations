@@ -1,8 +1,13 @@
 
 """
 
+Change Notes:
+    3.20.18: Differs from nc_analysis2. Change in analysis function restricts lin-discrim/log-reg to
+        electrode pairs that contain the two stimuli between the BFs of each electrode.
+
 Created on: 3.1.18
 """
+import pdb
 import time
 import numpy as np
 import scipy.io
@@ -103,7 +108,7 @@ rat_id = rat_ids[0] #this is where you would change the rat
 freq_band = freq_bands[3] #this is where we would change the high gamma
 
 
-def extract_noise_correlation_dataset(rat_dir, rat_id, freq_band):
+def extract_noise_correlation_dataset(rat_dir, rat_id, freq_band,twnd):
     print "Extracting noise correlation dataset for: %s"%(rat_id)
     print "Neural Frequency Band: %s"%(freq_band)
     rat_file = rat_dir + rat_id + '.WVL_CAR1.TN.RspM_TM.mat' #dset_ext
@@ -176,9 +181,10 @@ def extract_noise_correlation_dataset(rat_dir, rat_id, freq_band):
     # peak response calculated for 40 to 80 sample points after stimulus onset
     #TODO: PARAMETERIZE THE TIMEWINDOW ???!!!!
     #does 40 to 80!
+    print 'Extracting from timewindow: %s to %s'%(str(twnd[0]),str(twnd[1]))
     for i in xrange(amp_fq_length):
         for j in xrange(total_electrode_length):    
-            peak_response[i][j] = np.max(data[40:80,i,j])
+            peak_response[i][j] = np.max(data[twnd[0]:twnd[1],i,j])
 
 
     ## Print analysis parameters to verify a run
@@ -257,10 +263,13 @@ def noise_correlation_analysis(final_response, bf_el, method, twnd, amp_set, frq
     print final_response.shape
     # bf_el = load_object(dataset_path + rat_id + '_' + freq_band + '_bf_el.pkl')
 
-
+    ############
+    ##TODO: PARAMETERIZE
+    fdlt = 2 #frequency delta
+    ############
 
     num_of_electrodes = bf_el.shape[0]
-    results = []
+    results = {}
     #sorting to get electrodes with corresponding sorted electrodes
     electrode_bestfreq_sort_correspondence = np.argsort(bf_el, axis = 0)
     #print electrode_bestfreq_sort_correspondence
@@ -384,7 +393,8 @@ def noise_correlation_analysis(final_response, bf_el, method, twnd, amp_set, frq
     decor_y_examp = []
     count = 0
     pair_scores_dict = {}
-    scores = []
+    scores = {}
+    df_scores = {}
     test_dict = {}
     org_dict = {}
     decor_dict = {}
@@ -409,72 +419,131 @@ def noise_correlation_analysis(final_response, bf_el, method, twnd, amp_set, frq
 
         org_score = []
         decor_score = []
+        filt_el_combs = []
+        filt_stim_pairs = []
+        sf1 = b_stim_start+i
+        sf2 = b_stim_start+j
         for el_comb in electrode_pairs:
-        #for el_comb in electrode_combinations:
-            if method == "ld": #"linear discrim":
-                org_score_val, decor_score_val = pair_el_discrim_value(focused_response,stim_1,stim_2,[el_comb[0],el_comb[1]],adjust_volume=adjust_volume)
-                org_score.append(org_score_val)
-                decor_score.append(decor_score_val)
+            bf1 = bf_el[el_comb[0],1]
+            bf2 = bf_el[el_comb[1],1]
+            bfs = np.round(np.sort(np.array([bf1, bf2])))
             
-            if method == "lr": #"logistic regression":
-                model = sklearn.linear_model.LogisticRegression()
-                model = model.fit(mod_f_resp[:,[stim_1,stim_2],[el_comb[0],el_comb[1]]].reshape(num_of_samples*2,-1),np.array([-10]*num_of_samples+[10]*num_of_samples))
-                org_score.append(model.score(mod_f_resp[:,[stim_1,stim_2],[el_comb[0],el_comb[1]]].reshape(num_of_samples*2,-1),np.array([-10]*num_of_samples+[10]*num_of_samples)))
+            
+            #if sf1>bfs[0] and sf1<bfs[1] and sf2>bfs[0] and sf2<bfs[1]: #Stimulus pair falls between best frqs of electrode pair
+            #if bfs[0]>sf1 and bfs[0]<sf2 and bfs[1]>sf1 and bfs[1]<sf2: #Electrode best frqs pairs fall between stimulus pairs
+            #if ((abs(sf1-bfs[0]) <= fdlt) or (abs(sf2-bfs[0]) <= fdlt)) and ((abs(sf1-bfs[1]) <= fdlt) or (abs(sf2-bfs[1]) <= fdlt)): #bfs fall within interval fdtl of 
+            if ((abs(sf1-bfs[0]) <= fdlt)) and ((abs(sf2-bfs[1]) <= fdlt)):
+                # print 'Electrodes: ' +str([el_comb[0], el_comb[1]])
+                # print 'BFs: ' + str(bfs)
+                # print b_stim_start
+                # print [i,j]
+                
+                # print 'Stims: ' + str([sf1,sf2])
+                
+                #raise
+                #keep this electrode pair if the above condition is satisfied.
+                filt_el_combs.append([bf_el[el_comb[0],0],bf_el[el_comb[1],0]]) 
+                filt_stim_pairs.append([sf1, sf2])
+                if method == "ld": #"linear discrim":
+                    org_score_val, decor_score_val = pair_el_discrim_value(focused_response,stim_1,stim_2,[el_comb[0],el_comb[1]],adjust_volume=adjust_volume)
+                    org_score.append(org_score_val)
+                    decor_score.append(decor_score_val)
+                
+                if method == "lr": #"logistic regression":
+                    model = sklearn.linear_model.LogisticRegression()
+                    model = model.fit(mod_f_resp[:,[stim_1,stim_2],[el_comb[0],el_comb[1]]].reshape(num_of_samples*2,-1),np.array([-10]*num_of_samples+[10]*num_of_samples))
+                    org_score.append(model.score(mod_f_resp[:,[stim_1,stim_2],[el_comb[0],el_comb[1]]].reshape(num_of_samples*2,-1),np.array([-10]*num_of_samples+[10]*num_of_samples)))
 
-                model = sklearn.linear_model.LogisticRegression()
-                model = model.fit(dec_mod_f_resp[:,[stim_1,stim_2],[el_comb[0],el_comb[1]]].reshape(num_of_samples*2,-1),np.array([-10]*num_of_samples+[10]*num_of_samples))
-                decor_score.append(model.score(dec_mod_f_resp[:,[stim_1,stim_2],[el_comb[0],el_comb[1]]].reshape(num_of_samples*2,-1),np.array([-10]*num_of_samples+[10]*num_of_samples)))
+                    model = sklearn.linear_model.LogisticRegression()
+                    model = model.fit(dec_mod_f_resp[:,[stim_1,stim_2],[el_comb[0],el_comb[1]]].reshape(num_of_samples*2,-1),np.array([-10]*num_of_samples+[10]*num_of_samples))
+                    decor_score.append(model.score(dec_mod_f_resp[:,[stim_1,stim_2],[el_comb[0],el_comb[1]]].reshape(num_of_samples*2,-1),np.array([-10]*num_of_samples+[10]*num_of_samples)))
+        #Save the scores as a dictionary
+        if not scores.has_key(sf1):
+            scores[sf1] = {}
+        if not scores[sf1].has_key(sf2):
+            scores[sf1][sf2] = {}
+        scores[sf1][sf2]['el_pairs'] = np.array(filt_el_combs)
+        scores[sf1][sf2]['org_score'] = np.array(org_score)
+        scores[sf1][sf2]['decor_score'] = np.array(decor_score)
+        scores[sf1][sf2]['stim_pairs'] = np.array(filt_stim_pairs)
 
+        #Save the scores according to frequency pair distance
+        if filt_el_combs: #MAKE SURE AT LEAST SOME CHANNELS WERE INCLUDED
+            if not df_scores.has_key(j-i):
+                df_scores[j-i] = {}
+            if not df_scores[j-i].has_key('el_pairs'):
+                df_scores[j-i]['el_pairs'] = filt_el_combs
+            df_scores[j-i]['el_pairs'] = np.append(df_scores[j-i]['el_pairs'],filt_el_combs,axis=0)
 
-        discrim_x_examp.append(float(j-i))
-        discrim_y_examp.append(np.mean(np.array(org_score)-np.mean(np.array(decor_score))))
-        org_y_examp.append(np.mean(np.array(org_score)))
-        decor_y_examp.append(np.mean(np.array(decor_score)))
-        if not pair_scores_dict.has_key(j-i):
-            pair_scores_dict[j-i] = []
-        pair_scores_dict[j-i].append([np.mean(np.array(org_score)),np.mean(np.array(decor_score)),np.array(org_score),np.array(decor_score)])
-        #
-        scores.append([org_score,decor_score])
-        if not test_dict.has_key(j-i):
-            test_dict[j-i] = []
-        test_dict[j-i].append(np.mean(np.array(org_score)-np.array(decor_score)))
-        #Save org and decor values as a function of tuning difference
-        if not org_dict.has_key(j-i):
-            org_dict[j-i] = []
-        org_dict[j-i].append(np.mean(np.array(org_score)))
-        if not decor_dict.has_key(j-i):
-            decor_dict[j-i] = []
-        decor_dict[j-i].append(np.mean(np.array(decor_score)))
+            if not df_scores[j-i].has_key('stim_pairs'):
+                df_scores[j-i]['stim_pairs'] = filt_stim_pairs
+            df_scores[j-i]['stim_pairs'] = np.append(df_scores[j-i]['stim_pairs'],filt_stim_pairs,axis=0)
+            if not df_scores[j-i].has_key('org_score'):
+                df_scores[j-i]['org_score'] = org_score
+            df_scores[j-i]['org_score'] = np.append(df_scores[j-i]['org_score'],org_score,axis=0)
+            if not df_scores[j-i].has_key('decor_score'):
+                df_scores[j-i]['decor_score'] = decor_score
+            df_scores[j-i]['decor_score'] = np.append(df_scores[j-i]['decor_score'],decor_score,axis=0)
+            diff_score = np.array(org_score) - np.array(decor_score)
+            if not df_scores[j-i].has_key('diff_score'):
+                df_scores[j-i]['diff_score'] = diff_score
+            df_scores[j-i]['diff_score'] = np.append(df_scores[j-i]['diff_score'],diff_score,axis=0)
 
+        if org_score and decor_score:
+            discrim_x_examp.append(float(j-i))
+            discrim_y_examp.append(np.mean(np.array(org_score)-np.mean(np.array(decor_score))))
+            org_y_examp.append(np.mean(np.array(org_score)))
+            decor_y_examp.append(np.mean(np.array(decor_score)))
+            # if not pair_scores_dict.has_key(j-i):
+            #     pair_scores_dict[j-i] = []
+            # pair_scores_dict[j-i].append([np.mean(np.array(org_score)),np.mean(np.array(decor_score)),np.array(org_score),np.array(decor_score)])
+            #
+            #scores.append([org_score,decor_score]) ##TODO: THIS IS BROKEN AND WON'T SAVE BECAUSE NOT ALL ELECTRODES ARE USED FOR EACH STIMULUS PAIRING
+            
+            if not test_dict.has_key(j-i):
+                test_dict[j-i] = []
+            test_dict[j-i].append(np.mean(np.array(org_score)-np.array(decor_score)))
+            #Save org and decor values as a function of tuning difference
+            if not org_dict.has_key(j-i):
+                org_dict[j-i] = []
+            org_dict[j-i].append(np.mean(np.array(org_score)))
+            if not decor_dict.has_key(j-i):
+                decor_dict[j-i] = []
+            decor_dict[j-i].append(np.mean(np.array(decor_score)))
 
+            discrim_y_decor_examp.append(np.mean(np.array(decor_score)))
+            discrim_y_uncor_examp.append(np.mean(np.array(org_score)))
 
-        discrim_y_decor_examp.append(np.mean(np.array(decor_score)))
-        discrim_y_uncor_examp.append(np.mean(np.array(org_score)))
-    plt.scatter(x = np.array(discrim_x_examp), y = np.array(discrim_y_examp))
-    plt.scatter(x = np.array(discrim_x_examp), y = np.array(org_y_examp),color='g')
-    plt.scatter(x = np.array(discrim_x_examp), y = np.array(decor_y_examp),color='r')
-    #plt.plot([i for i in pair_scores_dict],[np.mean(np.array(pair_scores_dict[i][0]) - np.array(pair_scores_dict[i][1])) for i in pair_scores_dict])
-    #print [i for i in pair_scores_dict]
-    #print len(pair_scores_dict[1])
-    #print [np.mean(np.array(pair_scores_dict[i][0])) for i in pair_scores_dict]
-    #plt.plot([i for i in pair_scores_dict],[np.mean(np.array(pair_scores_dict[i][0])) for i in pair_scores_dict])
-    plt.plot([i for i in test_dict],[np.mean(np.array(test_dict[i])) for i in test_dict])
-    plt.plot([i for i in org_dict],[np.mean(np.array(org_dict[i])) for i in org_dict],'g')
-    plt.plot([i for i in decor_dict],[np.mean(np.array(decor_dict[i])) for i in decor_dict],'r')
-    plt.axhline(0)
-    plt.show()
+    ## FIGURE 5: Scatter of scores for correlated data, decorrelated, and the pairwise difference
+    # plt.scatter(x = np.array(discrim_x_examp), y = np.array(discrim_y_examp))
+    # plt.scatter(x = np.array(discrim_x_examp), y = np.array(org_y_examp),color='g')
+    # plt.scatter(x = np.array(discrim_x_examp), y = np.array(decor_y_examp),color='r')
+    # plt.plot([i for i in test_dict],[np.mean(np.array(test_dict[i])) for i in test_dict])
+    # plt.plot([i for i in org_dict],[np.mean(np.array(org_dict[i])) for i in org_dict],'g')
+    # plt.plot([i for i in decor_dict],[np.mean(np.array(decor_dict[i])) for i in decor_dict],'r')
+    # plt.axhline(0)
+    # plt.show()
     #plt.savefig()
     print count
-    scores = np.array(scores)
-
+    #scores = np.array(scores)
+    #pdb.set_trace()
 
     ## Keep results for this ratid and frequency band
     #TODO: Save these results
     #scores has structure scores[stim_pair][orig,decor][electrode_pair]
-    if results == [] or np.any(results[-1][0] != decor_focused_response):
-        results.append([decor_focused_response, scores, method])
+    # if results == [] or np.any(results[-1][0] != decor_focused_response):
+    #     results.append([decor_focused_response, scores, method])
 
-    return (decor_focused_response, scores, method, discrim_x_examp, discrim_y_examp, test_dict)
+    ## Return values
+    results['decor_focused_response'] = decor_focused_response
+    results['scores'] = scores
+    results['df_scores'] = df_scores
+    results['method'] = method
+    results['discrim_x_examp'] = discrim_x_examp
+    results['discrim_y_examp'] = discrim_y_examp
+    results['test_dict'] = test_dict
+    return results
+    #return (decor_focused_response, scores, method, discrim_x_examp, discrim_y_examp, test_dict)
 
 
 
