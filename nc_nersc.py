@@ -2,7 +2,7 @@
 
 # Import Libraries
 
-from nc_analysis2 import extract_noise_correlation_dataset, noise_correlation_analysis
+from nc_analysis4 import extract_noise_correlation_dataset, noise_correlation_analysis
 import pdb
 import sys
 import os
@@ -30,34 +30,38 @@ freq_bands = [u'B', u'G', u'HG', u'UHG', u'MUAR']
 rat_dir = root_dir + 'data/ToneAnalysisDatasets/'
 extract_save_dir = root_dir + 'data/nc_analysis/nc_datasets/'
 analysis_save_dir = root_dir + 'data/nc_analysis/results/'
-fig_dir = root_dir + 'data/nc_analysis/results/figures/40_60/'
 
+
+# Testing
 rat_ids = ['R32_B7']
-freq_bands = ['HG']
+freq_bands = ['G']
 
-nanls = len(rat_ids)*len(freq_bands)# Number of Analyses to perform
-print nanls
-## TESTING: Hard coded parameters
-if len(sys.argv) < 3:
-	rat_id = 'R6_B10'
-	freq_band = 'HG'
-else:
-	rat_id = sys.argv[1]
-	freq_band = sys.argv[2]
+#Extraction Parameters
+twnd = (40,60) #45,53
+FORCE_EXTRACT = 0;
+
+#Analysis Parameters
+method = 'ld'
+amp_set = [5, 6]
+#amp_set = [2,3,4,5,6,7]
+#amp_set = [7]
+frq_set = [] #Not currently implemented. Uses full range.
+
+#Analysis save path
+analysis_save_dir = analysis_save_dir + method + '_nca4_amp' + ''.join([str(i) for i in amp_set]) + '/'
+if not os.path.exists(analysis_save_dir):
+	os.makedirs(analysis_save_dir)
+
+fig_dir = root_dir + 'data/nc_analysis/results/figures/40_60_nca4_amp' + ''.join([str(i) for i in amp_set]) + '/'
+if not os.path.exists(fig_dir):
+	os.makedirs(fig_dir)
 
 for rat_id in rat_ids:
 	for freq_band in freq_bands:
-		#Extraction Parameters
-		twnd = (40,60) #45,53
-		FORCE_EXTRACT = 0;
 
-		#Analysis Parameters
-		method = 'ld'
-		amp_set = [5, 6]
-		frq_set = [] #Not currently implemented. Uses full range.
 
 		### Extract response if yet incomplete, or if FORCE_EXTRACT==1
-		print(rat_id, freq_band, str(twnd))
+		print(rat_id, freq_band, str(twnd), method, str(amp_set))
 		epath = extract_save_dir + rat_id + '_' + freq_band + '_ext_rsp.h5'
 		if not os.path.exists(epath) or FORCE_EXTRACT: 
 			if not os.path.exists(extract_save_dir): #Create the parent directory if it does not yet exist
@@ -102,7 +106,7 @@ for rat_id in rat_ids:
 		##Fig1: Plot the Corr and Decorr LDs as function of stimulus frequency difference
 		f, axarr = plt.subplots(1, 2,figsize=(12,5))
 		x = [i for i in results['df_scores']]
-		pdb.set_trace()
+		#pdb.set_trace()
 		org_y = [np.mean(np.array(results['df_scores'][i]['org_score'])) for i in results['df_scores']]
 		org_ysd = [np.std(np.array(results['df_scores'][i]['org_score'])) for i in results['df_scores']]
 		#org_ysem = [stats.sem(np.array(results['df_scores'][i]['org_score'])) for i in results['df_scores']]
@@ -126,12 +130,12 @@ for rat_id in rat_ids:
 		#pdb.set_trace()
 		f.suptitle(method + '_' + rat_id + '_' + freq_band)
 		plt.show(block=False)
-		plt.savefig(fig_dir + 'nc_' + method + '_' + rat_id + '_' + freq_band + '.png')
+		plt.savefig(fig_dir + 'nc_' + method + '_' + rat_id + '_' + freq_band + '.pdf')
 		plt.close()
 
 
 		### Save Results to HDF5 file
-		apath = analysis_save_dir + method + '/' + method + '_' + rat_id +'_' + freq_band + '_' + str(mpi_rank) + '.h5'
+		apath = analysis_save_dir + method + '_' + rat_id +'_' + freq_band + '_' + str(mpi_rank) + '.h5'
 		hfa = h5py.File(apath,'w') #h5 noise correlation
 		decor = hfa.create_dataset('decor_focused_response',data=results['decor_focused_response'])
 		# Save the scores for each electrode and stimulus pair

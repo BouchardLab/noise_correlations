@@ -2,10 +2,11 @@
 """
 
 Change Notes:
-    3.20.18: Differs from nc_analysis2. Change in analysis function restricts lin-discrim/log-reg to
-        electrode pairs that contain the two stimuli between the BFs of each electrode.
 
-Created on: 3.1.18
+    Branch Reason: Fixed Logistic Regression, additional exploration of improved stability by 
+    repetitive fitting of decorrelated data.
+
+Created on: 3.25.18
 """
 import pdb
 import time
@@ -121,7 +122,6 @@ def extract_noise_correlation_dataset(rat_dir, rat_id, freq_band,twnd):
     # Load dataset identifying the "Best Frequency" for each tuned electrode
     #TODO: this is needed for other rats? (for best frequencies)
     f2 = h5py.File(rat_dir + 'TN.FRA.anl2.mat','r+')
-    #print "USING FRA.anl.mat. Ignore the following"
     print "Using TN.FRA.anl2.mat"
     data2 = f2['frall'][freq_band][rat_id]
     #best frequencies
@@ -258,15 +258,16 @@ def extract_noise_correlation_dataset(rat_dir, rat_id, freq_band,twnd):
 #####################################
 
 def noise_correlation_analysis(final_response, bf_el, method, twnd, amp_set, frq_set, fig_dir):
-    num_of_samples = 40
+    num_of_samples = 20*len(amp_set)
     # Load Final Response
     # final_response = load_object(dataset_path + rat_id + '_' + freq_band + '_final_response.pkl')
-    print final_response.shape
+    print 'Pre-formatted: ' + str(final_response.shape)
     # bf_el = load_object(dataset_path + rat_id + '_' + freq_band + '_bf_el.pkl')
 
     ############
     ##TODO: PARAMETERIZE
     fdlt = 2 #frequency delta
+    n_trials = 1
     ############
 
     num_of_electrodes = bf_el.shape[0]
@@ -289,7 +290,7 @@ def noise_correlation_analysis(final_response, bf_el, method, twnd, amp_set, frq
     # rearraged so (126 electrodes, 20 samples, 30 stimuli, 8 attenuations) turn into
     # (40 samples from -10 and -20 attenuations, 126 electrodes, 19 frequecies within electrode best freq vals)
     # number of frequecies within electrode best freq vals
-    num_of_stims_used = 40
+    num_of_stims_used = num_of_samples
     b_stim_start = int(np.min(bf_el[:,1]))
     b_stim_end = int(np.max(bf_el[:,1])+1)
     num_of_best_stims = b_stim_end - b_stim_start
@@ -298,18 +299,18 @@ def noise_correlation_analysis(final_response, bf_el, method, twnd, amp_set, frq
 
     #collect only -10 and -20 attenuations
     #use only stimuli whose freqs are within electrode best freq values 
-    focused_response = np.transpose(final_response,(1,3,0,2))[:,5:7,:,b_stim_start:b_stim_end].reshape(num_of_stims_used,num_of_electrodes,-1)
-
+    focused_response = np.transpose(final_response,(1,3,0,2))[:,amp_set,:,b_stim_start:b_stim_end].reshape(num_of_stims_used,num_of_electrodes,-1)
+    #pdb.set_trace()
     #mean and std calculated for each electrode accross all peak responses
-    # peak_electrode_mean = np.dot(np.mean(final_response[:,:,:,5:7].reshape(num_of_electrodes,-1),axis =1).reshape(num_of_electrodes,1),np.ones([1,num_of_stims_used*num_of_best_stims]))
-    # peak_electrode_std = np.dot(np.std(final_response[:,:,:,5:7].reshape(num_of_electrodes,-1),axis =1).reshape(num_of_electrodes,1),np.ones([1,num_of_stims_used*num_of_best_stims]))
-    # peak_electrode_mean = np.transpose(peak_electrode_mean.reshape(num_of_electrodes,40,num_of_best_stims),(1,0,2))
-    # peak_electrode_std = np.transpose(peak_electrode_std.reshape(num_of_electrodes,40,num_of_best_stims),(1,0,2))
+    # peak_electrode_mean = np.dot(np.mean(final_response[:,:,:,amp_set].reshape(num_of_electrodes,-1),axis =1).reshape(num_of_electrodes,1),np.ones([1,num_of_stims_used*num_of_best_stims]))
+    # peak_electrode_std = np.dot(np.std(final_response[:,:,:,amp_set].reshape(num_of_electrodes,-1),axis =1).reshape(num_of_electrodes,1),np.ones([1,num_of_stims_used*num_of_best_stims]))
+    # peak_electrode_mean = np.transpose(peak_electrode_mean.reshape(num_of_electrodes,num_of_samples,num_of_best_stims),(1,0,2))
+    # peak_electrode_std = np.transpose(peak_electrode_std.reshape(num_of_electrodes,num_of_samples,num_of_best_stims),(1,0,2))
 
-    #z-scored electrode peak response values
-    ###### IF YOU DON'T WANT ZSCORE GET RID OF MEAN AND STD
-    ########## POTENTIAL CHANGE COMMENT OUT!!!!!
-    #focused_response = ((focused_response-peak_electrode_mean)/peak_electrode_std)
+    # #z-scored electrode peak response values
+    # ###### IF YOU DON'T WANT ZSCORE GET RID OF MEAN AND STD
+    # ########## POTENTIAL CHANGE COMMENT OUT!!!!!
+    # focused_response = ((focused_response-peak_electrode_mean)/peak_electrode_std)
     print('FOCUSED RESPONSE IS NOT BEING Z-SCORED')
 
     ##### Figure 2: electrode pair response to one tone stimulus frequency
@@ -340,13 +341,16 @@ def noise_correlation_analysis(final_response, bf_el, method, twnd, amp_set, frq
 
 
     ## Permuting accross samples within electrode and stimuli
-    decor_focused_response = np.zeros(focused_response.shape)
-    for i in range(focused_response.shape[2]):
-        for j in range(focused_response.shape[1]):
-            sample_perm = np.random.permutation(np.array(range(40)))
-            #sample_perm = np.array(range(40))
-            for k in range(focused_response.shape[0]):
-                decor_focused_response[k,j,i]=focused_response[sample_perm[k],j,i]
+    all_decor_focused_response = {}
+    for t in range(n_trials):
+        decor_focused_response = np.zeros(focused_response.shape)
+        for i in range(focused_response.shape[2]):
+            for j in range(focused_response.shape[1]):
+                sample_perm = np.random.permutation(np.array(range(num_of_samples)))
+                #sample_perm = np.array(range(40))
+                for k in range(focused_response.shape[0]):
+                    decor_focused_response[k,j,i]=focused_response[sample_perm[k],j,i]
+        all_decor_focused_response[t] = decor_focused_response
     ##### Figure 4: Decorrelated response after shuffling stimulus responses
     # f, axarr = plt.subplots(1, 2,figsize=(12,5))
     # el_x = 17
@@ -369,11 +373,15 @@ def noise_correlation_analysis(final_response, bf_el, method, twnd, amp_set, frq
     # plt.legend()
     # plt.show()
     ######
-
+    print 'Focused: ' + str(focused_response.shape)
 
     #transposing focused and decor response
     mod_f_resp = focused_response.transpose((0,2,1))
-    dec_mod_f_resp = decor_focused_response.transpose((0,2,1))
+    all_dec_mod_f_resp = {}
+    for t in range(n_trials):
+        decor_focused_response = all_decor_focused_response[t]
+        dec_mod_f_resp = decor_focused_response.transpose((0,2,1))
+        all_dec_mod_f_resp[t] = dec_mod_f_resp
 
     ## Generate index pairs for each stimulus frequency pair and electrode pair
     stim_pairs = []
@@ -408,12 +416,12 @@ def noise_correlation_analysis(final_response, bf_el, method, twnd, amp_set, frq
     #meathod = "log regression"
 
     ## For each stimulus and electrode pair, calculate linear discriminability or perform logistic regression
-    t=time.time()
+    tp=time.time()
     for (i,j) in stim_pairs:
         if count%10==0:
             # print(count + ', ', end='', flush=True)
-            print "%s : %ss"%(str(count),str(round(time.time()-t)))
-            t=time.time()
+            print "%s : %ss"%(str(count),str(round(time.time()-tp)))
+            tp=time.time()
         count += 1
         stim_1 = i
         stim_2 = j
@@ -446,19 +454,43 @@ def noise_correlation_analysis(final_response, bf_el, method, twnd, amp_set, frq
                 filt_el_combs.append([bf_el[el_comb[0],0],bf_el[el_comb[1],0]]) 
                 filt_stim_pairs.append([sf1, sf2])
                 if method == "ld": #"linear discrim":
-                    org_score_val, decor_score_val = pair_el_discrim_value(focused_response,stim_1,stim_2,[el_comb[0],el_comb[1]],adjust_volume=adjust_volume)
+                    org_score_val, decor_score_val = pair_el_discrim_value(focused_response,stim_1,stim_2,[el_comb[0],el_comb[1]],n_samples = num_of_samples, adjust_volume=adjust_volume)
                     org_score.append(org_score_val)
                     decor_score.append(decor_score_val)
                 
                 if method == "lr": #"logistic regression":
                     model = sklearn.linear_model.LogisticRegression()
-                    model = model.fit(mod_f_resp[:,[stim_1,stim_2],[el_comb[0],el_comb[1]]].reshape(num_of_samples*2,-1),np.array([-10]*num_of_samples+[10]*num_of_samples))
-                    org_score.append(model.score(mod_f_resp[:,[stim_1,stim_2],[el_comb[0],el_comb[1]]].reshape(num_of_samples*2,-1),np.array([-10]*num_of_samples+[10]*num_of_samples)))
-                    #if el_comb[0]==17 and el_comb[1]==99:
-                    #pdb.set_trace()
-                    model = sklearn.linear_model.LogisticRegression()
-                    model = model.fit(dec_mod_f_resp[:,[stim_1,stim_2],[el_comb[0],el_comb[1]]].reshape(num_of_samples*2,-1),np.array([-10]*num_of_samples+[10]*num_of_samples))
-                    decor_score.append(model.score(dec_mod_f_resp[:,[stim_1,stim_2],[el_comb[0],el_comb[1]]].reshape(num_of_samples*2,-1),np.array([-10]*num_of_samples+[10]*num_of_samples)))
+                    #X = mod_f_resp[:,[stim_1,stim_2],[el_comb[0],el_comb[1]]].reshape(num_of_samples*2,-1) <-James' Verison
+                    X = np.transpose(mod_f_resp[:,[stim_1,stim_2],:][:,:,[el_comb[0],el_comb[1]]],[1,0,2]).reshape(num_of_samples*2,-1)
+                    y = np.array([-10]*num_of_samples+[10]*num_of_samples)
+                    model = model.fit(X,y)
+                    org_score_val = model.score(X,y)
+                    for t in range(n_trials):
+                        org_score.append(org_score_val)
+                    # if org_score_val > .90 and sf2 -sf1 > 8:
+                    #     print mod_f_resp.shape
+                    #     print "stim1: " + str(stim_1)
+                    #     print 'stim2: ' + str(stim_2)
+                    #     print 'el1: ' + str(el_comb[0])
+                    #     print 'el2: ' + str(el_comb[1])
+                    #     plt.scatter(x=mod_f_resp[0:20,[stim_1],el_comb[0]],y=mod_f_resp[0:20,[stim_1],el_comb[1]],color='r')
+                    #     plt.scatter(x=mod_f_resp[20:40,[stim_1],el_comb[0]],y=mod_f_resp[20:40,[stim_1],el_comb[1]],marker='^',color='r')
+                    #     plt.scatter(x=mod_f_resp[0:20,[stim_2],el_comb[0]],y=mod_f_resp[0:20,[stim_2],el_comb[1]],color='b')
+                    #     plt.scatter(x=mod_f_resp[20:40,[stim_2],el_comb[0]],y=mod_f_resp[20:40,[stim_2],el_comb[1]],marker='^',color='b')
+                    #     plt.show()
+                    #     pdb.set_trace()
+                    t_decor_score_val = []
+                    for t in range(n_trials):
+                        dec_mod_f_resp = all_dec_mod_f_resp[t]
+                        model = sklearn.linear_model.LogisticRegression()
+                        Xd = np.transpose(dec_mod_f_resp[:,[stim_1,stim_2],:][:,:,[el_comb[0],el_comb[1]]],[1,0,2]).reshape(num_of_samples*2,-1)
+                        yd = np.array([-10]*num_of_samples+[10]*num_of_samples)
+                        model = model.fit(Xd,yd)
+                        decor_score_val = model.score(Xd,yd)
+                        decor_score.append(decor_score_val)
+                        #t_decor_score_val.append()
+                    #decor_score_val = np.mean(t_decor_score_val)
+                    #decor_score.append(decor_score_val)
         #Save the scores as a dictionary
         if not scores.has_key(sf1):
             scores[sf1] = {}
