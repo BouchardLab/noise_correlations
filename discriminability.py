@@ -1,13 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
-from scipy.stats import percentileofscore
-from scipy.signal import medfilt
-from sklearn.linear_model import LinearRegression
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis as QDA
+
 
 def mean_cov(x):
     return x.mean(axis=0), np.cov(x, rowvar=False)
+
 
 def mv_normal_kl(mu0, sigma0, mu1, sigma1):
     sigma1_inv = np.linalg.inv(sigma1)
@@ -18,10 +17,12 @@ def mv_normal_kl(mu0, sigma0, mu1, sigma1):
     logdets = np.log(np.linalg.det(sigma1)) - np.log(np.linalg.det(sigma0))
     return .5 * (tr + means + logdets - d)
 
+
 def mv_normal_jeffreys(mu0, sigma0, mu1, sigma1):
     """Calculate Jeffreys divergence, a symmetrized version of KL."""
     return .5 * (mv_normal_kl(mu0, sigma0, mu1, sigma1) +
                  mv_normal_kl(mu1, sigma1, mu0, sigma0))
+
 
 def mv_normal_jeffreys_data(x0, x1):
     """Calculate Jeffreys divergence from data."""
@@ -29,10 +30,12 @@ def mv_normal_jeffreys_data(x0, x1):
     mu1, sigma1 = mean_cov(x1)
     return mv_normal_jeffreys(mu0, sigma0, mu1, sigma1)
 
+
 def linear_discriminability(mu0, mu1, sigma):
     """Calculate linear discriminability when total covariance sigma is known."""
     mean_diff = mu1 - mu0
     return mean_diff.dot(np.linalg.inv(sigma)).dot(mean_diff)
+
 
 def linear_discriminability_data(x0, x1):
     """Calculate linear discriminability from data."""
@@ -41,6 +44,7 @@ def linear_discriminability_data(x0, x1):
     sigma = np.cov(np.concatenate((x0, x1)), rowvar=False)
     return linear_discriminability(mu0, mu1, sigma)
 
+
 def qda_data(x0, x1):
     """Calculate quadratic disciminability from data."""
     X = np.concatenate((x0, x1))
@@ -48,6 +52,7 @@ def qda_data(x0, x1):
     Y[:x0.shape[0]] = 1
     model = QDA().fit(X, Y)
     return model.score(X, Y)
+
 
 def plot_ellipses(mu0, sigma0, mu1, sigma1, ld_sigma=None):
     """Plot ellipses corresponding to bivariate normal distributions
