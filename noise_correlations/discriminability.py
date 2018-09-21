@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
-from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis as QDA
+from sklearn.discriminant_analysis import (QuadraticDiscriminantAnalysis as QDA,
+                                           LinearDiscriminantAnalysis as LDA)
 
 
 def mean_cov(x):
@@ -98,6 +99,25 @@ def linear_discriminability(mu0, mu1, sigma):
     return mean_diff.dot(np.linalg.inv(sigma)).dot(mean_diff)
 
 
+def linear_discriminability_samples(mu0, sigma_0, mu1, sigma1, size=10000):
+    """Calculate the linear discriminability for two distributions with
+    known individual means and total covariance.
+
+    Parameters
+    ----------
+    mu0 : ndarray (dim,)
+    mu1 : ndarray (dim,)
+    sigma: ndarray (dim, dim)
+
+    Returns
+    -------
+    Linear discriminability
+    """
+    x0 = np.random.multivariate_normal(mu0, sigma0, size=size)
+    x1 = np.random.multivariate_normal(mu1, sigma1, size=size)
+    return linear_discriminability_data
+
+
 def linear_discriminability_data(x0, x1):
     """Calculate the linear discriminability for two distributions from data.
 
@@ -114,6 +134,47 @@ def linear_discriminability_data(x0, x1):
     mu1 = x1.mean(axis=0)
     sigma = np.cov(np.concatenate((x0, x1)), rowvar=False)
     return linear_discriminability(mu0, mu1, sigma)
+
+
+def lda_data(x0, x1):
+    """Calculate the training accuracy from a Linear
+    Discriminant Analysis (LDA) model from data.
+
+    Parameters
+    ----------
+    x0 : ndarray (samples, dim)
+    x1 : ndarray (samples, dim)
+
+    Returns
+    -------
+    LDA accuracy
+    """
+    X = np.concatenate((x0, x1))
+    Y = np.zeros(X.shape[0])
+    Y[:x0.shape[0]] = 1
+    model = LDA().fit(X, Y)
+    return model.score(X, Y)
+
+
+def lda_samples(mu0, sigma0, mu1, sigma1, size=10000):
+    """Calculate the training accuracy from a Linear
+    Discriminant Analysis (LDA) model from two normal distributions
+    by sampling from them.
+
+    Parameters
+    ----------
+    mu0 : ndarray (dim,)
+    sigma0 : ndarray (dim, dim)
+    mu1 : ndarray (dim,)
+    sigma1: ndarray (dim, dim)
+
+    Returns
+    -------
+    LDA accuracy
+    """
+    x0 = np.random.multivariate_normal(mu0, sigma0, size=size)
+    x1 = np.random.multivariate_normal(mu1, sigma1, size=size)
+    return lda_data(x0, x1)
 
 
 def qda_data(x0, x1):
@@ -136,6 +197,27 @@ def qda_data(x0, x1):
     return model.score(X, Y)
 
 
+def qda_samples(mu0, sigma0, mu1, sigma1, size=100000):
+    """Calculate the training accuracy from a Quadratic
+    Discriminant Analysis (QDA) model from two normal distributions
+    by sampling from them.
+
+    Parameters
+    ----------
+    mu0 : ndarray (dim,)
+    sigma0 : ndarray (dim, dim)
+    mu1 : ndarray (dim,)
+    sigma1: ndarray (dim, dim)
+
+    Returns
+    -------
+    QDA accuracy
+    """
+    x0 = np.random.multivariate_normal(mu0, sigma0, size=size)
+    x1 = np.random.multivariate_normal(mu1, sigma1, size=size)
+    return qda_data(x0, x1)
+
+
 def plot_ellipses(mu0, sigma0, mu1, sigma1, ld_sigma=None):
     """Plot ellipses corresponding to bivariate normal distributions
     with means mu0, mu1 and covariances sigma0, sigma1. Can also include
@@ -149,7 +231,8 @@ def plot_ellipses(mu0, sigma0, mu1, sigma1, ld_sigma=None):
     sigma1: ndarray (2, 2)
     ld_sigma : ndarray (2, 2)
     """
-    assert mu0.size == 2
+    if mu0.size != 2:
+        raise ValueError
     f, ax = plt.subplots(1, figsize=(5, 5))
     c0, c1 = u'#1f77b4', u'#ff7f0e'
     for mu, sigma, c in [(mu0, sigma0, c0), (mu1, sigma1, c1)]:
@@ -167,3 +250,4 @@ def plot_ellipses(mu0, sigma0, mu1, sigma1, ld_sigma=None):
         ax.add_artist(ell)
     ax.set_xlim(0, 2)
     ax.set_ylim(0, 2)
+    return

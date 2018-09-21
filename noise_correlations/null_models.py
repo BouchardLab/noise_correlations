@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import discriminability
+from . import discriminability
 from scipy.stats import special_ortho_group
 
 
@@ -34,7 +34,19 @@ def random_rotation(mu, sigma):
     return mu, rotmat.dot(sigma).dot(rotmat.T)
 
 
-def histo_samples(orig0, orig1, trans, measure, nsamples):
+def random_rotation_data(x):
+    """Apply a random rotation to data.
+
+    Parameters
+    ----------
+    x : ndarray (examples, dim)
+    """
+    mu = x.mean(axis=0, keepdims=True)
+    rotmat = special_ortho_group.rvs(x.shape[1])
+    return rotmat.dot(x-mu).dot(rotmat.T) + mu
+
+
+def histo_samples(orig0, orig1, trans, measure, nsamples, faxes=None):
     """
     Plot a histogram of nsamples values of measure evaluated on orig0 and orig1
     after applying trans. Original value plotted as vertical line.
@@ -57,12 +69,45 @@ def histo_samples(orig0, orig1, trans, measure, nsamples):
         new0 = trans(orig0)
         new1 = trans(orig1)
         values[ii] = measure(new0, new1)
-    fig, ax = plt.subplots(1, 1)
+    if faxes is None:
+        faxes = plt.subplots(1, 1)
+    fig, ax = faxes
     vals, bins, patches = ax.hist(values, bins=50, density=True)
     orig_val = measure(orig0, orig1)
     ax.vlines(orig_val, 0, np.max(vals))
     frac_less = np.count_nonzero(orig_val > values)/nsamples
     return orig_val, frac_less, ax
+
+
+def eval_null(mu0, sigma0, mu1, sigma1, null, measures, nsamples):
+    """
+    Plot a histogram of nsamples values of measure evaluated on orig0 and orig1
+    after applying trans. Original value plotted as vertical line.
+
+    Parameters:
+    -----------
+    orig0       (examples, dim) data
+    orig1       (examples, dim) data
+    trans       (callable) data transformation
+    measure     (callable) takes 2 data arguments, returns comparison measure
+    nsamples    (int) number of times to apply trans and evaluate measure
+
+    Returns:
+    measure(orig0, orig1)
+    fraction of samples with measure less than original
+    matplotlib axis object
+    """
+    if not isinstance(measures, list):
+        measures = [measures]
+    orig_val = np.array([m(mu0, sigma0, mu1, sigma1) for m in measures])
+    values = np.zeros((len(measures), nsamples))
+    for ii in range(nsamples):
+        mu0p, sigma0p = null(mu0, sigma0)
+        mu1p, sigma1p = null(mu1, sigma1)
+        for jj, m in enumerate(measures):
+            values[jj, ii] = m(mu0p, sigma0p, mu1p, sigma1p)
+    frac_less = np.count_nonzero(orig_val[:, np.newaxis] > values, axis=1) / nsamples
+    return orig_val, values, frac_less
 
 
 def rot_plot(mu0, sigma0, mu1, sigma1, measure, nsamples=10000):
