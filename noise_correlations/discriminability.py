@@ -99,25 +99,6 @@ def linear_discriminability(mu0, mu1, sigma):
     return mean_diff.dot(np.linalg.inv(sigma)).dot(mean_diff)
 
 
-def linear_discriminability_samples(mu0, sigma_0, mu1, sigma1, size=10000):
-    """Calculate the linear discriminability for two distributions with
-    known individual means and total covariance.
-
-    Parameters
-    ----------
-    mu0 : ndarray (dim,)
-    mu1 : ndarray (dim,)
-    sigma: ndarray (dim, dim)
-
-    Returns
-    -------
-    Linear discriminability
-    """
-    x0 = np.random.multivariate_normal(mu0, sigma0, size=size)
-    x1 = np.random.multivariate_normal(mu1, sigma1, size=size)
-    return linear_discriminability_data
-
-
 def linear_discriminability_data(x0, x1):
     """Calculate the linear discriminability for two distributions from data.
 
@@ -134,6 +115,25 @@ def linear_discriminability_data(x0, x1):
     mu1 = x1.mean(axis=0)
     sigma = np.cov(np.concatenate((x0, x1)), rowvar=False)
     return linear_discriminability(mu0, mu1, sigma)
+
+
+def linear_discriminability_samples(mu0, sigma0, mu1, sigma1, size=10000):
+    """Calculate the linear discriminability for two distributions with
+    known individual means and total covariance.
+
+    Parameters
+    ----------
+    mu0 : ndarray (dim,)
+    mu1 : ndarray (dim,)
+    sigma: ndarray (dim, dim)
+
+    Returns
+    -------
+    Linear discriminability
+    """
+    x0 = np.random.multivariate_normal(mu0, sigma0, size=size)
+    x1 = np.random.multivariate_normal(mu1, sigma1, size=size)
+    return linear_discriminability_data(x0, x1)
 
 
 def lda_data(x0, x1):
