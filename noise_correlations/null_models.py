@@ -43,7 +43,7 @@ def random_rotation_data(x):
     """
     mu = x.mean(axis=0, keepdims=True)
     rotmat = special_ortho_group.rvs(x.shape[1])
-    return rotmat.dot(x-mu).dot(rotmat.T) + mu
+    return (x-mu).dot(rotmat) + mu
 
 
 def histo_samples(orig0, orig1, trans, measure, nsamples, faxes=None):
@@ -106,7 +106,7 @@ def eval_null(mu0, sigma0, mu1, sigma1, null, measures, nsamples):
         mu1p, sigma1p = null(mu1, sigma1)
         for jj, m in enumerate(measures):
             values[jj, ii] = m(mu0p, sigma0p, mu1p, sigma1p)
-    frac_less = np.count_nonzero(orig_val[:, np.newaxis] > values, axis=1) / nsamples
+    frac_less = np.count_nonzero(values > = orig_val[:, np.newaxis], axis=1) / nsamples
     return orig_val, values, frac_less
 
 
