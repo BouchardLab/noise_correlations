@@ -3,64 +3,51 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 from sklearn.discriminant_analysis import (QuadraticDiscriminantAnalysis as QDA,
                                            LinearDiscriminantAnalysis as LDA)
+from .utils import mean_cov
 
 
-def mean_cov(x):
-    """Calculate the mean and covariance of a data matrix.
-
-    Parameters
-    ----------
-    x : ndarray (samples, dim)
-        Data array.
-
-    Returns
-    -------
-    Mean vector and covariance matrix for the data matrix.
-    """
-    return x.mean(axis=0), np.cov(x, rowvar=False)
-
-
-def mv_normal_kl(mu0, sigma0, mu1, sigma1):
+def mv_normal_kl(mu0, cov0, mu1, cov1):
     """Calculates the KL Divergence between two multivariate normal
     distributions given their means and covariances.
 
     Parameters
     ----------
     mu0 : ndarray (dim,)
-    sigma0 : ndarray (dim, dim)
+    cov0 : ndarray (dim, dim)
     mu1 : ndarray (dim,)
-    sigma1: ndarray (dim, dim)
+    cov1: ndarray (dim, dim)
 
     Returns
     -------
     KL Divergence
     """
-    sigma1_inv = np.linalg.inv(sigma1)
+    cov1_inv = np.linalg.inv(cov1)
     mean_diff = mu1 - mu0
     d = mu1.size
-    tr = np.trace(sigma1_inv.dot(sigma0))
-    means = mean_diff.dot(sigma1_inv).dot(mean_diff)
-    logdets = np.log(np.linalg.det(sigma1)) - np.log(np.linalg.det(sigma0))
+    tr = np.trace(cov1_inv.dot(cov0))
+    means = mean_diff.dot(cov1_inv).dot(mean_diff)
+    logdets = np.log(np.linalg.det(cov1)) - np.log(np.linalg.det(cov0))
     return .5 * (tr + means + logdets - d)
 
 
-def mv_normal_jeffreys(mu0, sigma0, mu1, sigma1):
+def mv_normal_jeffreys(mu0, cov0, mu1, cov1):
     """Calculate the symmetric KL Divergence for two multivariate
     normal distributions.
 
     Parameters
     ----------
     mu0 : ndarray (dim,)
-    sigma0 : ndarray (dim, dim)
+    cov0 : ndarray (dim, dim)
     mu1 : ndarray (dim,)
-    sigma1: ndarray (dim, dim)
+    cov1: ndarray (dim, dim)
 
     Returns
     -------
     Symmetric KL Divergence
     """
-    return .5 * (mv_normal_kl(mu0, sigma0, mu1, sigma1) +
-                 mv_normal_kl(mu1, sigma1, mu0, sigma0))
+    kl1 = mv_normal_kl(mu0, cov0, mu1, cov1)
+    kl2 = mv_normal_kl(mu1, cov1, mu0, cov0)
+    return .5 * (kl1 + kl2)
 
 
 def mv_normal_jeffreys_data(x0, x1):
@@ -76,12 +63,12 @@ def mv_normal_jeffreys_data(x0, x1):
     -------
     Symmetric KL Divergence
     """
-    mu0, sigma0 = mean_cov(x0)
-    mu1, sigma1 = mean_cov(x1)
-    return mv_normal_jeffreys(mu0, sigma0, mu1, sigma1)
+    mu0, cov0 = mean_cov(x0)
+    mu1, cov1 = mean_cov(x1)
+    return mv_normal_jeffreys(mu0, cov0, mu1, cov1)
 
 
-def linear_discriminability(mu0, mu1, sigma):
+def linear_discriminability(mu0, mu1, cov):
     """Calculate the linear discriminability for two distributions with
     known individual means and total covariance.
 
@@ -89,14 +76,13 @@ def linear_discriminability(mu0, mu1, sigma):
     ----------
     mu0 : ndarray (dim,)
     mu1 : ndarray (dim,)
-    sigma: ndarray (dim, dim)
+    cov: ndarray (dim, dim)
 
     Returns
     -------
     Linear discriminability
     """
-    mean_diff = mu1 - mu0
-    return mean_diff.dot(np.linalg.inv(sigma)).dot(mean_diff)
+    return lfi(mu0, mu1, cov)
 
 
 def linear_discriminability_data(x0, x1):
@@ -111,13 +97,10 @@ def linear_discriminability_data(x0, x1):
     -------
     Linear discriminability
     """
-    mu0 = x0.mean(axis=0)
-    mu1 = x1.mean(axis=0)
-    sigma = np.cov(np.concatenate((x0, x1)), rowvar=False)
-    return linear_discriminability(mu0, mu1, sigma)
+    return lfi_data(x0, x1)
 
 
-def linear_discriminability_samples(mu0, sigma0, mu1, sigma1, size=10000):
+def linear_discriminability_samples(mu0, cov0, mu1, cov1, size=10000):
     """Calculate the linear discriminability for two distributions with
     known individual means and total covariance.
 
@@ -125,14 +108,14 @@ def linear_discriminability_samples(mu0, sigma0, mu1, sigma1, size=10000):
     ----------
     mu0 : ndarray (dim,)
     mu1 : ndarray (dim,)
-    sigma: ndarray (dim, dim)
+    cov: ndarray (dim, dim)
 
     Returns
     -------
     Linear discriminability
     """
-    x0 = np.random.multivariate_normal(mu0, sigma0, size=size)
-    x1 = np.random.multivariate_normal(mu1, sigma1, size=size)
+    x0 = np.random.multivariate_normal(mu0, cov0, size=size)
+    x1 = np.random.multivariate_normal(mu1, cov1, size=size)
     return linear_discriminability_data(x0, x1)
 
 
@@ -156,7 +139,7 @@ def lda_data(x0, x1):
     return model.score(X, Y)
 
 
-def lda_samples(mu0, sigma0, mu1, sigma1, size=10000):
+def lda_samples(mu0, cov0, mu1, cov1, size=10000):
     """Calculate the training accuracy from a Linear
     Discriminant Analysis (LDA) model from two normal distributions
     by sampling from them.
@@ -164,16 +147,16 @@ def lda_samples(mu0, sigma0, mu1, sigma1, size=10000):
     Parameters
     ----------
     mu0 : ndarray (dim,)
-    sigma0 : ndarray (dim, dim)
+    cov0 : ndarray (dim, dim)
     mu1 : ndarray (dim,)
-    sigma1: ndarray (dim, dim)
+    cov1: ndarray (dim, dim)
 
     Returns
     -------
     LDA accuracy
     """
-    x0 = np.random.multivariate_normal(mu0, sigma0, size=size)
-    x1 = np.random.multivariate_normal(mu1, sigma1, size=size)
+    x0 = np.random.multivariate_normal(mu0, cov0, size=size)
+    x1 = np.random.multivariate_normal(mu1, cov1, size=size)
     return lda_data(x0, x1)
 
 
@@ -197,7 +180,7 @@ def qda_data(x0, x1):
     return model.score(X, Y)
 
 
-def qda_samples(mu0, sigma0, mu1, sigma1, size=100000):
+def qda_samples(mu0, cov0, mu1, cov1, size=100000):
     """Calculate the training accuracy from a Quadratic
     Discriminant Analysis (QDA) model from two normal distributions
     by sampling from them.
@@ -205,47 +188,161 @@ def qda_samples(mu0, sigma0, mu1, sigma1, size=100000):
     Parameters
     ----------
     mu0 : ndarray (dim,)
-    sigma0 : ndarray (dim, dim)
+    cov0 : ndarray (dim, dim)
     mu1 : ndarray (dim,)
-    sigma1: ndarray (dim, dim)
+    cov1: ndarray (dim, dim)
 
     Returns
     -------
     QDA accuracy
     """
-    x0 = np.random.multivariate_normal(mu0, sigma0, size=size)
-    x1 = np.random.multivariate_normal(mu1, sigma1, size=size)
+    x0 = np.random.multivariate_normal(mu0, cov0, size=size)
+    x1 = np.random.multivariate_normal(mu1, cov1, size=size)
     return qda_data(x0, x1)
 
 
-def plot_ellipses(mu0, sigma0, mu1, sigma1, ld_sigma=None):
+def lfi(mu0, mu1, cov, dtheta=1.):
+    """Calculate the linear Fisher information from two data matrices.
+
+    Parameters
+    ----------
+    x0 : ndarray (samples, dim)
+    x1 : ndarray (samples, dim)
+    dtheta : float
+        Change in stimulus between x0 and x1.
+
+    Returns
+    -------
+    Symmetric KL Divergence
+    """
+    dmu_dtheta = (mu1 - mu0) / dtheta
+
+    return dmu_dtheta.dot(np.linalg.inv(cov).dot(dmu_dtheta.T))
+
+
+def lfi_data(x0, x1, dtheta=1.):
+    """Calculate the linear Fisher information from two data matrices.
+
+    Parameters
+    ----------
+    x0 : ndarray (samples, dim)
+    x1 : ndarray (samples, dim)
+    dtheta : float
+        Change in stimulus between x0 and x1.
+
+    Returns
+    -------
+    Symmetric KL Divergence
+    """
+    mu0 = x0.mean(axis=0)
+    mu1 = x1.mean(axis=0)
+    cov = np.cov(np.concatenate((x0, x1)), rowvar=False)
+
+    dmu_dtheta = (mu1 - mu0) / dtheta
+
+    return dmu_dtheta.dot(np.linalg.inv(cov).dot(dmu_dtheta.T))
+
+
+def corrected_lfi_data(x0, x1, dtheta=1.):
+    """Calculate the corrected linear Fisher information from two data matrices.
+    https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004218
+
+    Parameters
+    ----------
+    x0 : ndarray (samples, dim)
+    x1 : ndarray (samples, dim)
+    dtheta : float
+        Change in stimulus between x0 and x1.
+
+    Returns
+    -------
+    Symmetric KL Divergence
+    """
+    T = x0.shape[0]
+    N = x0.shape[1]
+    c0 = (2 * T - N - 3.) / (2. * T - 2)
+    c1 = (2. * N) / (T * dtheta**2)
+    if x0.shape[0] != x1.shape[1]:
+        raise ValueError
+
+    return (lfi_data(x0, x1, dtheta) * c0) - c1
+
+
+def lfi_shuffle_data(x0, x1, dtheta=1.):
+    """Calculate the shuffled linear Fisher information from two data matrices.
+
+    Parameters
+    ----------
+    x0 : ndarray (samples, dim)
+    x1 : ndarray (samples, dim)
+    dtheta : float
+        Change in stimulus between x0 and x1.
+
+    Returns
+    -------
+    Symmetric KL Divergence
+    """
+    mu0 = x0.mean(axis=0)
+    mu1 = x1.mean(axis=0)
+    var = np.var(np.concatenate((x0, x1)), axis=0, ddof=1)
+
+    dmu_dtheta = (mu1 - mu0) / dtheta
+
+    return np.sum(dmu_dtheta**2 / var)
+
+
+def corrected_lfi_shuffle_data(x0, x1, dtheta=1.):
+    """Calculate the shuffled linear Fisher information from two data matrices.
+
+    Parameters
+    ----------
+    x0 : ndarray (samples, dim)
+    x1 : ndarray (samples, dim)
+    dtheta : float
+        Change in stimulus between x0 and x1.
+
+    Returns
+    -------
+    Symmetric KL Divergence
+    """
+    T = x0.shape[0]
+    N = x0.shape[1]
+    c0 = (T - 2.) / (T - 1.)
+    c1 = (2. * N) / (T * dtheta**2)
+
+    return (lfi_shuffle_data(x0, x1) * c0) - c1
+
+
+def plot_ellipses(mu0, cov0, mu1, cov1, ld_cov=None):
     """Plot ellipses corresponding to bivariate normal distributions
-    with means mu0, mu1 and covariances sigma0, sigma1. Can also include
+    with means mu0, mu1 and covariances cov0, cov1. Can also include
     an ellipse for the linear discriminability covariance.
 
     Parameters
     ----------
     mu0 : ndarray (2,)
-    sigma0 : ndarray (2, 2)
+    cov0 : ndarray (2, 2)
     mu1 : ndarray (2,)
-    sigma1: ndarray (2, 2)
-    ld_sigma : ndarray (2, 2)
+    cov1: ndarray (2, 2)
+    ld_cov : ndarray (2, 2)
     """
     if mu0.size != 2:
         raise ValueError
     f, ax = plt.subplots(1, figsize=(5, 5))
     c0, c1 = u'#1f77b4', u'#ff7f0e'
-    for mu, sigma, c in [(mu0, sigma0, c0), (mu1, sigma1, c1)]:
-        e, v = np.linalg.eigh(sigma)
+    for mu, cov, c in [(mu0, cov0, c0), (mu1, cov1, c1)]:
+        e, v = np.linalg.eigh(cov)
         e = np.sqrt(e)
-        ell = Ellipse(mu, e[1], e[0], 180. * np.arctan2(v[0, -1], v[1, -1]) / np.pi,
+        ell = Ellipse(mu, e[1], e[0],
+                      180. * np.arctan2(v[0, -1], v[1, -1]) / np.pi,
                       facecolor=c, alpha=.5)
         ax.plot(mu[0], mu[1], 'o', c=c)
         ax.add_artist(ell)
-    if ld_sigma is not None:
-        e, v = np.linalg.eigh(ld_sigma)
+    if ld_cov is not None:
+        e, v = np.linalg.eigh(ld_cov)
         e = np.sqrt(e)
-        ell = Ellipse(.5*(mu0+mu1), e[1], e[0], 180. * np.arctan2(v[0, -1], v[1, -1]) / np.pi,
+        ell = Ellipse(.5 * (mu0 + mu1), e[1], e[0],
+                      180. * np.arctan2(v[0, -1], v[1, -1]) / np.pi,
                       facecolor='None', alpha=.5, edgecolor='k')
         ax.add_artist(ell)
     ax.set_xlim(0, 2)
