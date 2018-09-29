@@ -106,7 +106,7 @@ def eval_null(mu0, cov0, mu1, cov1, null, measures, nsamples):
         mu1p, cov1p = null(mu1, cov1)
         for jj, m in enumerate(measures):
             values[jj, ii] = m(mu0p, cov0p, mu1p, cov1p)
-    frac_less = np.count_nonzero(orig_val[:, np.newaxis] > values,
+    frac_less = np.count_nonzero(values >= orig_val[:, np.newaxis],
                                  axis=1) / nsamples
     return orig_val, values, frac_less
 

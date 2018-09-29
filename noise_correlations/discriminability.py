@@ -180,7 +180,7 @@ def qda_data(x0, x1):
     return model.score(X, Y)
 
 
-def qda_samples(mu0, cov0, mu1, cov1, size=100000):
+def qda_samples(mu0, cov0, mu1, cov1, size=10000):
     """Calculate the training accuracy from a Quadratic
     Discriminant Analysis (QDA) model from two normal distributions
     by sampling from them.
@@ -258,6 +258,34 @@ def corrected_lfi_data(x0, x1, dtheta=1.):
     -------
     Symmetric KL Divergence
     """
+    T = x0.shape[0]
+    N = x0.shape[1]
+    c0 = (2 * T - N - 3.) / (2. * T - 2)
+    c1 = (2. * N) / (T * dtheta**2)
+    if x0.shape[0] != x1.shape[1]:
+        raise ValueError
+
+    return (lfi_data(x0, x1, dtheta) * c0) - c1
+
+
+def corrected_lfi_samples(mu0, cov0, mu1, cov1, size=10000, dtheta=1.):
+    """Calculate the corrected linear Fisher information from samples from two
+    multivariante normal distributions.
+    https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004218
+
+    Parameters
+    ----------
+    x0 : ndarray (samples, dim)
+    x1 : ndarray (samples, dim)
+    dtheta : float
+        Change in stimulus between x0 and x1.
+
+    Returns
+    -------
+    Symmetric KL Divergence
+    """
+    x0 = np.random.multivariate_normal(mu0, cov0, size=size)
+    x1 = np.random.multivariate_normal(mu1, cov1, size=size)
     T = x0.shape[0]
     N = x0.shape[1]
     c0 = (2 * T - N - 3.) / (2. * T - 2)
