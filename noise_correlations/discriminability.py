@@ -262,7 +262,7 @@ def corrected_lfi_data(x0, x1, dtheta=1.):
     N = x0.shape[1]
     c0 = (2 * T - N - 3.) / (2. * T - 2)
     c1 = (2. * N) / (T * dtheta**2)
-    if x0.shape[0] != x1.shape[1]:
+    if x0.shape[0] != x1.shape[0]:
         raise ValueError
 
     return (lfi_data(x0, x1, dtheta) * c0) - c1
