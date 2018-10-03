@@ -100,25 +100,6 @@ def linear_discriminability_data(x0, x1):
     return lfi_data(x0, x1)
 
 
-def linear_discriminability_samples(mu0, cov0, mu1, cov1, size=10000):
-    """Calculate the linear discriminability for two distributions with
-    known individual means and total covariance.
-
-    Parameters
-    ----------
-    mu0 : ndarray (dim,)
-    mu1 : ndarray (dim,)
-    cov: ndarray (dim, dim)
-
-    Returns
-    -------
-    Linear discriminability
-    """
-    x0 = np.random.multivariate_normal(mu0, cov0, size=size)
-    x1 = np.random.multivariate_normal(mu1, cov1, size=size)
-    return linear_discriminability_data(x0, x1)
-
-
 def lda_data(x0, x1):
     """Calculate the training accuracy from a Linear
     Discriminant Analysis (LDA) model from data.
