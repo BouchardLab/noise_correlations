@@ -68,9 +68,9 @@ def mv_normal_jeffreys_data(x0, x1):
     return mv_normal_jeffreys(mu0, cov0, mu1, cov1)
 
 
-def linear_discriminability(mu0, mu1, cov):
+def linear_discriminability(mu0, cov0, mu1, cov1):
     """Calculate the linear discriminability for two distributions with
-    known individual means and total covariance.
+    known individual means and covariances.
 
     Parameters
     ----------
@@ -82,7 +82,7 @@ def linear_discriminability(mu0, mu1, cov):
     -------
     Linear discriminability
     """
-    return lfi(mu0, mu1, cov)
+    return lfi(mu0, cov0, mu1, cov1)
 
 
 def linear_discriminability_data(x0, x1):
@@ -201,7 +201,7 @@ def qda_samples(mu0, cov0, mu1, cov1, size=10000):
     return qda_data(x0, x1)
 
 
-def lfi(mu0, mu1, cov, dtheta=1.):
+def lfi(mu0, cov0, mu1, cov1, dtheta=1.):
     """Calculate the linear Fisher information from two data matrices.
 
     Parameters
@@ -216,8 +216,9 @@ def lfi(mu0, mu1, cov, dtheta=1.):
     Symmetric KL Divergence
     """
     dmu_dtheta = (mu1 - mu0) / dtheta
+    cov = (cov0 + cov1) / 2.
 
-    return dmu_dtheta.dot(np.linalg.inv(cov).dot(dmu_dtheta.T))
+    return dmu_dtheta.dot(np.linalg.pinv(cov).dot(dmu_dtheta.T))
 
 
 def lfi_data(x0, x1, dtheta=1.):
@@ -234,13 +235,10 @@ def lfi_data(x0, x1, dtheta=1.):
     -------
     Symmetric KL Divergence
     """
-    mu0 = x0.mean(axis=0)
-    mu1 = x1.mean(axis=0)
-    cov = np.cov(np.concatenate((x0, x1)), rowvar=False)
+    mu0, cov0 = mean_cov(x0)
+    mu1, cov1 = mean_cov(x1)
 
-    dmu_dtheta = (mu1 - mu0) / dtheta
-
-    return dmu_dtheta.dot(np.linalg.inv(cov).dot(dmu_dtheta.T))
+    return lfi(mu0, cov0, mu1, cov1, dtheta)
 
 
 def corrected_lfi_data(x0, x1, dtheta=1.):
