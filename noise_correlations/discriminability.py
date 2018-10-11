@@ -1,6 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.patches import Ellipse
 from sklearn.discriminant_analysis import (QuadraticDiscriminantAnalysis as QDA,
                                            LinearDiscriminantAnalysis as LDA)
 from .utils import mean_cov
@@ -318,40 +316,3 @@ def corrected_lfi_shuffle_data(x0, x1, dtheta=1.):
     c1 = (2. * N) / (T * dtheta**2)
 
     return (lfi_shuffle_data(x0, x1) * c0) - c1
-
-
-def plot_ellipses(mu0, cov0, mu1, cov1, ld_cov=None):
-    """Plot ellipses corresponding to bivariate normal distributions
-    with means mu0, mu1 and covariances cov0, cov1. Can also include
-    an ellipse for the linear discriminability covariance.
-
-    Parameters
-    ----------
-    mu0 : ndarray (2,)
-    cov0 : ndarray (2, 2)
-    mu1 : ndarray (2,)
-    cov1: ndarray (2, 2)
-    ld_cov : ndarray (2, 2)
-    """
-    if mu0.size != 2:
-        raise ValueError
-    f, ax = plt.subplots(1, figsize=(5, 5))
-    c0, c1 = u'#1f77b4', u'#ff7f0e'
-    for mu, cov, c in [(mu0, cov0, c0), (mu1, cov1, c1)]:
-        e, v = np.linalg.eigh(cov)
-        e = np.sqrt(e)
-        ell = Ellipse(mu, e[1], e[0],
-                      180. * np.arctan2(v[0, -1], v[1, -1]) / np.pi,
-                      facecolor=c, alpha=.5)
-        ax.plot(mu[0], mu[1], 'o', c=c)
-        ax.add_artist(ell)
-    if ld_cov is not None:
-        e, v = np.linalg.eigh(ld_cov)
-        e = np.sqrt(e)
-        ell = Ellipse(.5 * (mu0 + mu1), e[1], e[0],
-                      180. * np.arctan2(v[0, -1], v[1, -1]) / np.pi,
-                      facecolor='None', alpha=.5, edgecolor='k')
-        ax.add_artist(ell)
-    ax.set_xlim(0, 2)
-    ax.set_ylim(0, 2)
-    return
