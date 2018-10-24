@@ -23,7 +23,20 @@ class BlancheCRCNSpvc3_cat(object):
 
 
     def trial_design_matrices(self):
-        """Return the total spike counts per trial."""
+        """Return the total spike counts per trial.
+        stimuli.
+
+        Returns
+        -------
+        trial_angles : ndarray (n_trial)
+            Angles for each bin.
+        X_1h : ndarray (n_trial, n_angles)
+            One-hot vector for the angle in each trial.
+        X_cos : ndarray (n_trial, 2)
+            Cosine and sine of the angle for each trial.
+        Y : ndarray (n_trials, n_neurons)
+            Spike count for each trial for each neuron."""
+
         n_trials = self.trial_labels.size
         n_neurons = self.neurons.size
         n_angles = self.angles.size
@@ -68,9 +81,24 @@ class BlancheCRCNSpvc3_cat(object):
 
 
     def bin_spikes(self, bin_ms):
-        """Return the total spike counts per bin.
+        """Return the total spike counts per bin. No bins will have mixed
+        stimuli.
 
-        No bins will have mixed stimuli."""
+        Parameters
+        ----------
+        bin_ms : float
+            Bin length in milliseconds.
+
+        Returns
+        -------
+        bin_angles : ndarray (n_bins)
+            Angles for each bin.
+        X_1h : ndarray (n_bins, n_angles)
+            One-hot vector for the angle in each bin.
+        X_cos : ndarray (n_bins, 2)
+            Cosine and sine of the angle for each bin.
+        Y : ndarray (n_bins, n_neurons)
+            Spike count for each bin for each neuron."""
 
         n_trials = self.trial_labels.size
         n_neurons = self.neurons.size
@@ -93,7 +121,7 @@ class BlancheCRCNSpvc3_cat(object):
         n_bins = bins_per_trial.sum()
 
         # design matrices
-        trial_angles = -1 * np.ones(n_bins, dtype=int)
+        bin_angles = -1 * np.ones(n_bins, dtype=int)
         X_1h = np.zeros((n_bins, n_angles), dtype=int)
         X_cos = np.zeros((n_bins, 2))
 
@@ -101,12 +129,8 @@ class BlancheCRCNSpvc3_cat(object):
         Y = -1 * np.ones((n_bins, n_neurons), dtype=int)
         bin_idx = 0
         for ii, idx in enumerate(start_idxs[:-1]):
-            stim_idx = self.stim_labels[idx]
-            angle = self.angles[stim_idx]
-            trial_angles[bin_idx] = angle
-            X_1h[bin_idx, stim_idx] = 1
-            X_cos[bin_idx] = [np.cos(np.deg2rad(angle)),
-                              np.sin(np.deg2rad(angle))]
+            stim_label = self.stim_labels[idx]
+            angle = self.angles[stim_label]
 
             start_t = self.stim_times[idx]
             end_t = start_t + bin_ms * 1e3
@@ -117,9 +141,13 @@ class BlancheCRCNSpvc3_cat(object):
                     (self.spike_times[neuron] >= start_t) &
                     (self.spike_times[neuron] < end_t)
                 ) for neuron in self.neurons]
+                bin_angles[bin_idx] = angle
+                X_1h[bin_idx, stim_label] = 1
+                X_cos[bin_idx] = [np.cos(np.deg2rad(angle)),
+                                  np.sin(np.deg2rad(angle))]
                 start_t = end_t
                 end_t = start_t + bin_ms * 1e3
                 bin_idx += 1
                 #print(end_t, self.stim_times[-1])
 
-        return trial_angles, X_1h, X_cos, Y
+        return bin_angles, X_1h, X_cos, Y
