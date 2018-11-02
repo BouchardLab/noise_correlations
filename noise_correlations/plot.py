@@ -1,6 +1,114 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.patches import Ellipse
+from matplotlib.patches import Ellipse, Rectangle
+from scipy.special import factorial
+
+from .discriminability import lfi_data, lda_data
+from .null_models import random_rotation_data, shuffle_data
+from . import null_models
+
+
+def scatter_max_ps(Yp, n_boot, ps=None, faxes=None):
+    if faxes is None:
+        faxes = plt.subplots(1, 2, figsize=(10, 5))
+    f, (ax0, ax1) = faxes
+    if ps is None:
+        n_neurons, n_angles, n_trials = Yp.shape
+        n_pairs = (factorial(n_neurons, exact=True) //
+                   (2 * factorial(n_neurons - 2, exact=True)))
+        ps = np.full((2, 2, n_pairs, n_angles), np.nan)
+        pair_idx = 0
+        for ii in range(1, n_neurons):
+            print(pair_idx, n_pairs)
+            for jj in range(ii):
+                for kk in range(n_angles):
+                    x = Yp[[ii, jj]][:, kk].T
+                    y = Yp[[ii, jj]][:, (kk + 1) % n_angles].T
+                    val_s, values_s, ps_s = null_models.eval_null_data(x, y, shuffle_data, [lfi_data, lda_data], n_boot)
+                    val_r, values_r, ps_r = null_models.eval_null_data(x, y, random_rotation_data, [lfi_data, lda_data], n_boot)
+                    ps[0, :, pair_idx, kk] = ps_s
+                    ps[1, :, pair_idx, kk] = ps_r
+                pair_idx += 1
+    plot_pvalue_comparison(ps[0, 0].ravel(), ps[1, 0].ravel(),
+                           labels=['Shuffle p-value', 'Rotation p-value'], faxes=(f, ax0))
+    plot_pvalue_comparison(ps[0, 1].ravel(), ps[1, 1].ravel(),
+                           labels=['Shuffle p-value', 'Rotation p-value'], faxes=(f, ax1))
+    ax0.set_title('LFI')
+    ax1.set_title('LDA Accuracy')
+    return ps, faxes
+
+
+def scatter_blanche_ps(Yp, n_boot, ps=None, faxes=None):
+    if faxes is None:
+        faxes = plt.subplots(1, 2, figsize=(10, 5))
+    f, (ax0, ax1) = faxes
+    if ps is None:
+        n_neurons, n_angles, n_trials = Yp.shape
+        n_pairs = (factorial(n_neurons, exact=True) //
+                   (2 * factorial(n_neurons - 2, exact=True)))
+        ps = np.full((2, 2, n_pairs, n_angles), np.nan)
+        pair_idx = 0
+        for ii in range(1, n_neurons):
+            print(pair_idx, n_pairs)
+            for jj in range(ii):
+                for kk in range(n_angles):
+                    x = Yp[[ii, jj]][:, kk].T
+                    y = Yp[[ii, jj]][:, (kk + 1) % n_angles].T
+                    val_s, values_s, ps_s = null_models.eval_null_data(x, y, shuffle_data, [lfi_data, lda_data], n_boot)
+                    val_r, values_r, ps_r = null_models.eval_null_data(x, y, random_rotation_data, [lfi_data, lda_data], n_boot)
+                    ps[0, :, pair_idx, kk] = ps_s
+                    ps[1, :, pair_idx, kk] = ps_r
+                pair_idx += 1
+    plot_pvalue_comparison(ps[0, 0].ravel(), ps[1, 0].ravel(),
+                           labels=['Shuffle p-value', 'Rotation p-value'], faxes=(f, ax0))
+    plot_pvalue_comparison(ps[0, 1].ravel(), ps[1, 1].ravel(),
+                           labels=['Shuffle p-value', 'Rotation p-value'], faxes=(f, ax1))
+    ax0.set_title('LFI')
+    ax1.set_title('LDA Accuracy')
+    return ps, faxes
+
+
+def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None):
+    if faxes is None:
+        faxes = plt.subplots(1, figsize=(5, 5))
+    f, ax = faxes
+    pos = ax.get_position()
+    print(pos)
+    p0s[p0s == 0] = p0s[p0s > 0].min()
+    p1s[p1s == 0] = p1s[p1s > 0].min()
+    ax.scatter(p0s, p1s, marker='.')
+    if m is None:
+        m = np.power(10., np.floor(np.log10(min(p0s.min(), p1s.min()))))
+    ax.plot([m, 1], [m, 1], c='k')
+    ax.axhline(.05, m, 1, c='k', ls='--')
+    ax.axvline(.05, m, 1, c='k', ls='--')
+    ax.set_xlim(m, 1)
+    ax.set_ylim(m, 1)
+    cs = [u'#9467bd', u'#8c564b']
+    ax.add_artist(Rectangle((m, .05), .05-min(.05, m), 1-min(.05, m),
+                            facecolor=cs[0], alpha=.3))
+    ax.add_artist(Rectangle((.05, m), 1-min(.05, m), .05-min(.05, m),
+                            facecolor=cs[1], alpha=.3))
+    ax.set_yscale('log')
+    ax.set_xscale('log')
+    ax.set_xlabel(labels[0])
+    ax.set_ylabel(labels[1])
+    w = pos.x1 - pos.x0
+    h = pos.y1 - pos.y0
+    edge = .175
+    size = .35
+    ax1 = f.add_axes([pos.x0 + edge * w, pos.y0 + edge * h / 2., size * w, size * h])
+    p1_not_0 = (np.logical_and(p0s <= .05, p1s > .05)).sum()
+    p0_not_1 = (np.logical_and(p1s <= .05, p0s > .05)).sum()
+    ax1.bar([0, 1], [p1_not_0, p0_not_1], color=cs, alpha=.3)
+    n = max(p1_not_0, p0_not_1)
+    dec = int(np.ceil(np.log10(n)))
+    ax1.set_yticks([0, n])
+    ax1.set_xticks([0, 1])
+    ax1.set_xticklabels(['$\in$Purp.', '$\in$Br.'])
+    ax1.set_xticklabels(['', ''])
+    ax1.set_ylabel('Counts', labelpad=-5 * dec)
+    return faxes
 
 
 def plot_ellipses(mu0, cov0, mu1, cov1, ld_cov=None, faxes=None):
