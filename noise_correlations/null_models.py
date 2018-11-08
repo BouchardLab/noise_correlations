@@ -9,10 +9,12 @@ def erase_offdiag(mu, cov):
     return mu, np.diag(np.diag(cov))
 
 
-def shuffle_data(xx):
+def shuffle_data(xx, rng=None):
     """Permute each column independently.
     Model-agnostic analog of removing off-diagonal entries of covariance."""
-    shuffled = [np.random.permutation(xx[:, ii]) for ii in range(xx.shape[1])]
+    if rng is None:
+        rng = np.random
+    shuffled = [rng.permutation(xx[:, ii]) for ii in range(xx.shape[1])]
     return np.vstack(shuffled).T
 
 
@@ -28,25 +30,29 @@ def diag_and_scale(mu, cov):
     return mu, factor * diagmat
 
 
-def random_rotation(mu, cov):
+def random_rotation(mu, cov, rng=None):
     """Apply a random rotation to cov."""
-    rotmat = special_ortho_group.rvs(cov.shape[0])
+    if rng is None:
+        rng = np.random
+    rotmat = special_ortho_group.rvs(cov.shape[0], random_state=rng)
     return mu, rotmat.dot(cov).dot(rotmat.T)
 
 
-def random_rotation_data(x):
+def random_rotation_data(x, rng=None):
     """Apply a random rotation to data.
 
     Parameters
     ----------
     x : ndarray (examples, dim)
     """
+    if rng is None:
+        rng = np.random
     mu = x.mean(axis=0, keepdims=True)
-    rotmat = special_ortho_group.rvs(x.shape[1])
+    rotmat = special_ortho_group.rvs(x.shape[1], random_state=rng)
     return (x - mu).dot(rotmat.T) + mu
 
 
-def eval_null(mu0, cov0, mu1, cov1, null, measures, nsamples):
+def eval_null(mu0, cov0, mu1, cov1, null, measures, nsamples, seed=20181107, same_null=False):
     """
     Plot a histogram of nsamples values of measure evaluated on orig0 and orig1
     after applying trans. Original value plotted as vertical line.
@@ -64,13 +70,19 @@ def eval_null(mu0, cov0, mu1, cov1, null, measures, nsamples):
     fraction of samples with measure less than original
     matplotlib axis object
     """
+    rng = np.random.RandomState(seed)
     if not isinstance(measures, list):
         measures = [measures]
     orig_val = np.array([m(mu0, cov0, mu1, cov1) for m in measures])
     values = np.zeros((len(measures), nsamples))
+    if same_null:
+        rng2 = np.random.RandomState()
+        rng2.set_state(rng.__getstate__())
+    else:
+        rng2 = rng
     for ii in range(nsamples):
-        mu0p, cov0p = null(mu0, cov0)
-        mu1p, cov1p = null(mu1, cov1)
+        mu0p, cov0p = null(mu0, cov0, rng)
+        mu1p, cov1p = null(mu1, cov1, rng2)
         for jj, m in enumerate(measures):
             values[jj, ii] = m(mu0p, cov0p, mu1p, cov1p)
     frac_less = np.count_nonzero(values >= orig_val[:, np.newaxis],
@@ -78,7 +90,7 @@ def eval_null(mu0, cov0, mu1, cov1, null, measures, nsamples):
     return orig_val, values, frac_less
 
 
-def eval_null_data(x0, x1, null, measures, nsamples):
+def eval_null_data(x0, x1, null, measures, nsamples, seed=20181108, same_null=False):
     """
     Plot a histogram of nsamples values of measure evaluated on orig0 and orig1
     after applying trans. Original value plotted as vertical line.
@@ -96,13 +108,19 @@ def eval_null_data(x0, x1, null, measures, nsamples):
     fraction of samples with measure less than original
     matplotlib axis object
     """
+    rng = np.random.RandomState(seed)
     if not isinstance(measures, list):
         measures = [measures]
     orig_val = np.array([m(x0, x1) for m in measures])
     values = np.zeros((len(measures), nsamples))
+    if same_null:
+        rng2 = np.random.RandomState()
+        rng2.set_state(rng.__getstate__())
+    else:
+        rng2 = rng
     for ii in range(nsamples):
-        x0p = null(x0)
-        x1p = null(x1)
+        x0p = null(x0, rng)
+        x1p = null(x1, rng2)
         for jj, m in enumerate(measures):
             values[jj, ii] = m(x0p, x1p)
     frac_less = np.count_nonzero(values >= orig_val[:, np.newaxis],

@@ -2,11 +2,14 @@ import os, glob
 
 import numpy as np
 
+from itertools import product
+from scipy.io import loadmat
+
 from .drifting_bar import ori, sweeplist
 
-"""Based on Pratik Sachdeva's notebook."""
 
 class BlancheCRCNSpvc3_cat(object):
+    """Based on Pratik Sachdeva's notebook."""
     def __init__(self, folder):
         spike_path = os.path.join(folder, 'spike_data')
         stimulus_file = os.path.join(folder, 'stimulus_data/drifting_bar.din')
@@ -151,3 +154,23 @@ class BlancheCRCNSpvc3_cat(object):
                 #print(end_t, self.stim_times[-1])
 
         return bin_angles, X_1h, X_cos, Y
+
+
+class KohnCRCNSpvc11_monkey(object):
+    """Based on Pratik Sachdeva's notebook."""
+    def __init__(self, folder, monkey=1):
+        if monkey not in [1, 2, 3]:
+            raise ValueError
+        subfolder = 'spikes_gratings/data_monkey{}_gratings.mat'
+        d = loadmat(os.path.join(folder, subfolder.format(monkey)),
+                    struct_as_record=False)
+        events = d['data'][0, 0].EVENTS
+        n_neurons, n_stimuli, n_trials = events.shape
+        self.spike_counts = np.zeros(events.shape)
+        for neuron, stim, trial  in product(range(n_neurons),
+                                            range(n_stimuli),
+                                            range(n_trials)):
+            self.spike_counts[neuron, stim, trial] = events[neuron, stim, trial].size
+
+    def data_tensor(self):
+        return self.spike_counts
