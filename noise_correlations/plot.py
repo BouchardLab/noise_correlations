@@ -76,7 +76,7 @@ def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None):
     print(pos)
     p0s[p0s == 0] = p0s[p0s > 0].min()
     p1s[p1s == 0] = p1s[p1s > 0].min()
-    ax.scatter(p0s, p1s, marker='.')
+    ax.scatter(p0s, p1s, marker='.', c='k')
     if m is None:
         m = np.power(10., np.floor(np.log10(min(p0s.min(), p1s.min()))))
     ax.plot([m, 1], [m, 1], c='k')
@@ -84,11 +84,13 @@ def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None):
     ax.axvline(.05, m, 1, c='k', ls='--')
     ax.set_xlim(m, 1)
     ax.set_ylim(m, 1)
-    cs = [u'#9467bd', u'#8c564b']
+    cs = [u'#9467bd', u'#8c564b', u'#17becf']
     ax.add_artist(Rectangle((m, .05), .05-min(.05, m), 1-min(.05, m),
                             facecolor=cs[0], alpha=.3))
     ax.add_artist(Rectangle((.05, m), 1-min(.05, m), .05-min(.05, m),
                             facecolor=cs[1], alpha=.3))
+    ax.add_artist(Rectangle((m, m), .05-min(.05, m), .05-min(.05, m),
+                            facecolor=cs[2], alpha=.3))
     ax.set_yscale('log')
     ax.set_xscale('log')
     ax.set_xlabel(labels[0])
@@ -98,16 +100,20 @@ def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None):
     edge = .175
     size = .35
     ax1 = f.add_axes([pos.x0 + edge * w, pos.y0 + edge * h / 2., size * w, size * h])
-    p1_not_0 = (np.logical_and(p0s <= .05, p1s > .05)).sum()
-    p0_not_1 = (np.logical_and(p1s <= .05, p0s > .05)).sum()
-    ax1.bar([0, 1], [p1_not_0, p0_not_1], color=cs, alpha=.3)
-    n = max(p1_not_0, p0_not_1)
+    p0_not_1 = (np.logical_and(p0s < .05, p1s >= .05)).sum()
+    p1_not_0 = (np.logical_and(p1s < .05, p0s >= .05)).sum()
+    p0_and_1 = (np.logical_and(p1s < .05, p0s < .05)).sum()
+    ax1.bar([0, 1, 2], [p0_not_1, p1_not_0, p0_and_1], color=cs, alpha=.3)
+    n = max(max(p0_not_1, p1_not_0), p0_and_1)
     dec = int(np.ceil(np.log10(n)))
-    ax1.set_yticks([0, n])
+    ax1.set_yticks([])
     ax1.set_xticks([0, 1])
     ax1.set_xticklabels(['$\in$Purp.', '$\in$Br.'])
     ax1.set_xticklabels(['', ''])
-    ax1.set_ylabel('Counts', labelpad=-5 * dec)
+    ax1.set_ylabel('Counts')
+    ax1.text(0, n, p0_not_1, va='top', ha='center')
+    ax1.text(1, n, p1_not_0, va='top', ha='center')
+    ax1.text(2, n, p0_and_1, va='top', ha='center')
     return faxes
 
 

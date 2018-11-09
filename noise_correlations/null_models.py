@@ -9,13 +9,22 @@ def erase_offdiag(mu, cov):
     return mu, np.diag(np.diag(cov))
 
 
-def shuffle_data(xx, rng=None):
+def shuffle_data(x, size=1, rng=None):
     """Permute each column independently.
     Model-agnostic analog of removing off-diagonal entries of covariance."""
     if rng is None:
         rng = np.random
-    shuffled = [rng.permutation(xx[:, ii]) for ii in range(xx.shape[1])]
-    return np.vstack(shuffled).T
+    x = x.copy()
+    if size == 1:
+        for ii in range(x.shape[1]):
+            x[:, ii] = rng.permutation(x[:, ii])
+        return x
+    else:
+        out = np.zeros((size,) +  x.shape)
+        for ii in range(size):
+            for jj in range(x.shape[1]):
+                out[ii, :, jj] = rng.permutation(x[:, jj])
+        return out
 
 
 def diag_and_scale(mu, cov):
@@ -30,15 +39,20 @@ def diag_and_scale(mu, cov):
     return mu, factor * diagmat
 
 
-def random_rotation(mu, cov, rng=None):
+def random_rotation(mu, cov, size=1, rng=None):
     """Apply a random rotation to cov."""
     if rng is None:
         rng = np.random
-    rotmat = special_ortho_group.rvs(cov.shape[0], random_state=rng)
-    return mu, rotmat.dot(cov).dot(rotmat.T)
+    sog = special_ortho_group(cov.shape[0])
+    if size == 1:
+        rot = sog.rvs(cov.shape[0], random_state=rng)
+        return mu, rot.dot(cov).dot(rot.T)
+    else:
+        rots = sog.rvs(size, random_state=rng)
+        return mu[np.newaxis], np.einsum('nij, jk, nlk->nil', rots, cov, rots)
 
 
-def random_rotation_data(x, rng=None):
+def random_rotation_data(x, size=1, rng=None):
     """Apply a random rotation to data.
 
     Parameters
@@ -47,12 +61,18 @@ def random_rotation_data(x, rng=None):
     """
     if rng is None:
         rng = np.random
+    sog = special_ortho_group(x.shape[1])
     mu = x.mean(axis=0, keepdims=True)
-    rotmat = special_ortho_group.rvs(x.shape[1], random_state=rng)
-    return (x - mu).dot(rotmat.T) + mu
+    if size == 1:
+        rot = sog.rvs(random_state=rng)
+        return (x - mu).dot(rot.T) + mu
+    else:
+        rots = sog.rvs(size, random_state=rng)
+        rval = np.einsum('ij, klj', x-mu, rots)
+        return np.transpose(rval, axes=(1, 0, 2)) + mu[np.newaxis]
 
 
-def eval_null(mu0, cov0, mu1, cov1, null, measures, nsamples, seed=20181107, same_null=False):
+def eval_null(mu0, cov0, mu1, cov1, null, measures, nsamples, seed=201811071, same_null=False):
     """
     Plot a histogram of nsamples values of measure evaluated on orig0 and orig1
     after applying trans. Original value plotted as vertical line.
@@ -90,7 +110,7 @@ def eval_null(mu0, cov0, mu1, cov1, null, measures, nsamples, seed=20181107, sam
     return orig_val, values, frac_less
 
 
-def eval_null_data(x0, x1, null, measures, nsamples, seed=20181108, same_null=False):
+def eval_null_data(x0, x1, null, measures, nsamples, seed=201811072, same_null=False):
     """
     Plot a histogram of nsamples values of measure evaluated on orig0 and orig1
     after applying trans. Original value plotted as vertical line.
@@ -118,9 +138,11 @@ def eval_null_data(x0, x1, null, measures, nsamples, seed=20181108, same_null=Fa
         rng2.set_state(rng.__getstate__())
     else:
         rng2 = rng
+    x0ps = null(x0, size=nsamples, rng=rng)
+    x1ps = null(x1, size=nsamples, rng=rng2)
     for ii in range(nsamples):
-        x0p = null(x0, rng)
-        x1p = null(x1, rng2)
+        x0p = x0ps[ii]
+        x1p = x1ps[ii]
         for jj, m in enumerate(measures):
             values[jj, ii] = m(x0p, x1p)
     frac_less = np.count_nonzero(values >= orig_val[:, np.newaxis],
