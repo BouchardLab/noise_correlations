@@ -39,17 +39,33 @@ def diag_and_scale(mu, cov):
     return mu, factor * diagmat
 
 
-def random_rotation(mu, cov, size=1, rng=None):
+def random_rotation(mus, covs, size=1, rng=None):
     """Apply a random rotation to cov."""
     if rng is None:
         rng = np.random
-    sog = special_ortho_group(cov.shape[0])
-    if size == 1:
-        rot = sog.rvs(cov.shape[0], random_state=rng)
-        return mu, rot.dot(cov).dot(rot.T)
+    if isinstance(mus, list):
+        dim = mus[0].size
     else:
-        rots = sog.rvs(size, random_state=rng)
-        return mu[np.newaxis], np.einsum('nij, jk, nlk->nil', rots, cov, rots)
+        dim = mus.size
+    sog = special_ortho_group(dim=dim)
+    if size == 1:
+        rot = sog.rvs(random_state=rng)
+        if isinstance(covs, list):
+            covs = [rot.dot(cov).dot(rot.T) for cov in covs]
+        else:
+            covs = rot.dot(covs).dot(rot.T)
+    else:
+        rots = sog.rvs(size=size, random_state=rng)
+        if isinstance(mus, list):
+            mus = [mu[np.newaxis] for mu in mus]
+        else:
+            mus = mus[np.newaxis]
+        if isinstance(covs, list):
+            covs = [np.einsum('nij, jk, nlk->nil', rots, cov, rots)
+                    for cov in covs]
+        else:
+            covs = np.einsum('nij, jk, nlk->nil', rots, cov, rots)
+    return mus, covs
 
 
 def random_rotation_data(x, size=1, rng=None):
@@ -61,72 +77,76 @@ def random_rotation_data(x, size=1, rng=None):
     """
     if rng is None:
         rng = np.random
-    sog = special_ortho_group(x.shape[1])
+    sog = special_ortho_group(dim=x.shape[1])
     mu = x.mean(axis=0, keepdims=True)
     if size == 1:
         rot = sog.rvs(random_state=rng)
         return (x - mu).dot(rot.T) + mu
     else:
-        rots = sog.rvs(size, random_state=rng)
+        rots = sog.rvs(size=size, random_state=rng)
         rval = np.einsum('ij, klj', x-mu, rots)
         return np.transpose(rval, axes=(1, 0, 2)) + mu[np.newaxis]
 
 
 def eval_null(mu0, cov0, mu1, cov1, null, measures, nsamples, seed=201811071, same_null=False):
-    """
-    Plot a histogram of nsamples values of measure evaluated on orig0 and orig1
-    after applying trans. Original value plotted as vertical line.
+    """Estimate the null distribution given covariance matrices.
 
-    Parameters:
-    -----------
-    orig0       (examples, dim) data
-    orig1       (examples, dim) data
-    trans       (callable) data transformation
-    measure     (callable) takes 2 data arguments, returns comparison measure
-    nsamples    (int) number of times to apply trans and evaluate measure
+    Parameters
+    ----------
+    mu0
+    cov0
+    mu1
+    cov1
+    null
+    measures
+    nsamples
+    seed
+    same_null
 
-    Returns:
-    measure(orig0, orig1)
-    fraction of samples with measure less than original
-    matplotlib axis object
+    Returns
+    -------
+    orig_val
+    values
+    ps
     """
     rng = np.random.RandomState(seed)
     if not isinstance(measures, list):
         measures = [measures]
     orig_val = np.array([m(mu0, cov0, mu1, cov1) for m in measures])
     values = np.zeros((len(measures), nsamples))
-    if same_null:
-        rng2 = np.random.RandomState()
-        rng2.set_state(rng.__getstate__())
-    else:
-        rng2 = rng
     for ii in range(nsamples):
-        mu0p, cov0p = null(mu0, cov0, rng)
-        mu1p, cov1p = null(mu1, cov1, rng2)
+        if same_null:
+            [mu0p, mu1p], [cov0p, cov1p] = null([mu0, mu1], [cov0, cov1], rng=rng)
+        else:
+            mu0p, cov0p = null(mu0, cov0, rng=rng)
+            mu1p, cov1p = null(mu1, cov1, rng=rng)
         for jj, m in enumerate(measures):
             values[jj, ii] = m(mu0p, cov0p, mu1p, cov1p)
-    frac_less = np.count_nonzero(values >= orig_val[:, np.newaxis],
+    ps = np.count_nonzero(values >= orig_val[:, np.newaxis],
                                  axis=1) / nsamples
-    return orig_val, values, frac_less
+    return orig_val, values, ps
 
 
 def eval_null_data(x0, x1, null, measures, nsamples, seed=201811072, same_null=False):
-    """
-    Plot a histogram of nsamples values of measure evaluated on orig0 and orig1
-    after applying trans. Original value plotted as vertical line.
+    """Estimate the null distribution given covariance matrices.
 
-    Parameters:
-    -----------
-    orig0       (examples, dim) data
-    orig1       (examples, dim) data
-    trans       (callable) data transformation
-    measure     (callable) takes 2 data arguments, returns comparison measure
-    nsamples    (int) number of times to apply trans and evaluate measure
+    Parameters
+    ----------
+    mu0
+    cov0
+    mu1
+    cov1
+    null
+    measures
+    nsamples
+    seed
+    same_null
 
-    Returns:
-    measure(orig0, orig1)
-    fraction of samples with measure less than original
-    matplotlib axis object
+    Returns
+    -------
+    orig_val
+    values
+    ps
     """
     rng = np.random.RandomState(seed)
     if not isinstance(measures, list):
@@ -145,6 +165,6 @@ def eval_null_data(x0, x1, null, measures, nsamples, seed=201811072, same_null=F
         x1p = x1ps[ii]
         for jj, m in enumerate(measures):
             values[jj, ii] = m(x0p, x1p)
-    frac_less = np.count_nonzero(values >= orig_val[:, np.newaxis],
+    ps = np.count_nonzero(values >= orig_val[:, np.newaxis],
                                  axis=1) / nsamples
-    return orig_val, values, frac_less
+    return orig_val, values, ps
