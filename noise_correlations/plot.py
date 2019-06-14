@@ -140,7 +140,7 @@ def plot_ellipses(mu0, cov0, mu1, cov1, ld_cov=None, faxes=None):
         e, v = np.linalg.eigh(cov)
         e = np.sqrt(e)
         ell = Ellipse(mu, e[1], e[0],
-                      180. * np.arctan2(v[0, -1], v[1, -1]) / np.pi,
+                      180. * np.arctan2(v[1, -1], v[0, -1]) / np.pi,
                       facecolor=c, alpha=.5)
         ax.plot(mu[0], mu[1], 'o', c=c)
         ax.add_artist(ell)
