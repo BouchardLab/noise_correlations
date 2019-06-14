@@ -1,6 +1,8 @@
 import numpy as np
 from sklearn.discriminant_analysis import (QuadraticDiscriminantAnalysis as QDA,
                                            LinearDiscriminantAnalysis as LDA)
+import torch
+
 from .utils import mean_cov
 
 
@@ -19,12 +21,19 @@ def mv_normal_kl(mu0, cov0, mu1, cov1):
     -------
     KL Divergence
     """
-    cov1_inv = np.linalg.inv(cov1)
+    use_torch = any([isinstance(item, torch.Tensor)
+                     for item in [mu0, cov0, mu1, cov1]])
     mean_diff = mu1 - mu0
-    d = mu1.size
-    tr = np.trace(cov1_inv.dot(cov0))
-    means = mean_diff.dot(cov1_inv).dot(mean_diff)
-    logdets = np.log(np.linalg.det(cov1)) - np.log(np.linalg.det(cov0))
+    if use_torch:
+        d = torch.prod(mu1.size)
+        tr = torch.trace(torch.solve(cov1_inv, cov0)[0])
+        means = mean_diff.dot(torch.solve(cov1_inv, mean_diff)[0]
+        logdets = np.linalg.slogdet(cov1)[1] - np.linalg.slogdet(cov0)
+    else:
+        d = mu1.size
+        tr = np.trace(np.solve(cov1_inv, cov0))
+        means = mean_diff.mm(np.linalg.solve(cov1_inv, mean_diff))
+        logdets = torch.slogdet(cov1)[1] - torch.slogdet(cov0)
     return .5 * (tr + means + logdets - d)
 
 
@@ -194,10 +203,15 @@ def lfi(mu0, cov0, mu1, cov1, dtheta=1.):
     -------
     Symmetric KL Divergence
     """
+    use_torch = any([isinstance(item, torch.Tensor)
+                     for item in [mu0, cov0, mu1, cov1]])
     dmu_dtheta = (mu1 - mu0) / dtheta
     cov = (cov0 + cov1) / 2.
 
-    return dmu_dtheta.dot(np.linalg.pinv(cov).dot(dmu_dtheta.T))
+    if use_torch:
+        return dmu_dtheta.mm(torch.solve(cov, dmu_dtheta.t()))
+    else:
+        return dmu_dtheta.dot(np.linalg.pinv(cov).dot(dmu_dtheta.T))
 
 
 def lfi_data(x0, x1, dtheta=1.):
