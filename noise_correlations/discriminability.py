@@ -22,9 +22,9 @@ def mv_normal_kl(mu0, cov0, mu1, cov1):
     cov1_inv = np.linalg.inv(cov1)
     mean_diff = mu1 - mu0
     d = mu1.size
-    tr = np.trace(cov1_inv.dot(cov0))
-    means = mean_diff.dot(cov1_inv).dot(mean_diff)
-    logdets = np.log(np.linalg.det(cov1)) - np.log(np.linalg.det(cov0))
+    tr = np.trace(np.linalg.solve(cov1, cov0))
+    means = mean_diff.dot(np.linalg.solve(cov1, mean_diff))
+    logdets = np.linalg.slogdet(cov1)[1] - np.linalg.slogdet(cov0)[1]
     return .5 * (tr + means + logdets - d)
 
 
@@ -197,7 +197,7 @@ def lfi(mu0, cov0, mu1, cov1, dtheta=1.):
     dmu_dtheta = (mu1 - mu0) / dtheta
     cov = (cov0 + cov1) / 2.
 
-    return dmu_dtheta.dot(np.linalg.pinv(cov).dot(dmu_dtheta.T))
+    return dmu_dtheta.dot(np.linalg.solve(cov, dmu_dtheta.T))
 
 
 def lfi_data(x0, x1, dtheta=1.):

@@ -100,6 +100,7 @@ def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None):
     edge = .175
     size = .35
     ax1 = f.add_axes([pos.x0 + edge * w, pos.y0 + edge * h / 2., size * w, size * h])
+    ax1.set_xlabel('Total: {}'.format(p0s.size))
     p0_not_1 = (np.logical_and(p0s < .05, p1s >= .05)).sum()
     p1_not_0 = (np.logical_and(p1s < .05, p0s >= .05)).sum()
     p0_and_1 = (np.logical_and(p1s < .05, p0s < .05)).sum()
@@ -107,7 +108,7 @@ def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None):
     n = max(max(p0_not_1, p1_not_0), p0_and_1)
     dec = int(np.ceil(np.log10(n)))
     ax1.set_yticks([])
-    ax1.set_xticks([0, 1])
+    ax1.set_xticks([])
     ax1.set_xticklabels(['$\in$Purp.', '$\in$Br.'])
     ax1.set_xticklabels(['', ''])
     ax1.set_ylabel('Counts')

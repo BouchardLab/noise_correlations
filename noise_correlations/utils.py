@@ -17,13 +17,18 @@ def mean_cov(x):
     return x.mean(axis=0), np.cov(x, rowvar=False)
 
 
-def uniform_correlation_matrix(dim, var, corr):
+def uniform_correlation_matrix(dim, var, corr, noise_std=0., rng=None):
     """Create a uniform covariance matrix with constant variance and uniform
     pairwise covariance. Will have a single e0 eigenvalue and dim-1 e1
     eigenvalues
     """
     cov = np.ones((dim, dim)) * var * corr
     cov[np.arange(dim), np.arange(dim)] = var
+    if noise_std > 0.:
+        if rng is None:
+            rng = np.random
+        noise = rng.randn(dim, dim) * noise_std
+        cov += noise.dot(noise.T)
     return cov
 
 
