@@ -4,9 +4,9 @@ from . import discriminability
 from scipy.stats import special_ortho_group
 
 
-def erase_offdiag(mu, cov):
+def erase_offdiag(mus, covs):
     """Remove off-diagonal entries of cov."""
-    return mu, np.diag(np.diag(cov))
+    return mus, [np.diag(np.diag(cov)) for cov in covs]
 
 
 def shuffle_data(x, size=1, rng=None):

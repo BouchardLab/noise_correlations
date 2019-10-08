@@ -26,14 +26,14 @@ def mv_normal_kl(mu0, cov0, mu1, cov1):
     mean_diff = mu1 - mu0
     if use_torch:
         d = torch.prod(mu1.size)
-        tr = torch.trace(torch.solve(cov1_inv, cov0)[0])
-        means = mean_diff.dot(torch.solve(cov1_inv, mean_diff)[0]
-        logdets = np.linalg.slogdet(cov1)[1] - np.linalg.slogdet(cov0)
+        tr = torch.trace(torch.solve(cov1, cov0)[0])
+        means = mean_diff.mm(torch.solve(cov1, mean_diff)[0])
+        logdets = torch.slogdet(cov1)[1] - torch.slogdet(cov0)
     else:
         d = mu1.size
-        tr = np.trace(np.solve(cov1_inv, cov0))
-        means = mean_diff.mm(np.linalg.solve(cov1_inv, mean_diff))
-        logdets = torch.slogdet(cov1)[1] - torch.slogdet(cov0)
+        tr = np.trace(np.linalg.solve(cov1, cov0))
+        means = mean_diff.dot(np.linalg.solve(cov1, mean_diff))
+        logdets = np.linalg.slogdet(cov1)[1] - np.linalg.slogdet(cov0)[1]
     return .5 * (tr + means + logdets - d)
 
 
@@ -232,6 +232,27 @@ def lfi_data(x0, x1, dtheta=1.):
     mu1, cov1 = mean_cov(x1)
 
     return lfi(mu0, cov0, mu1, cov1, dtheta)
+
+
+def corrected_lfi(mu0, cov0, mu1, cov1, T, N, dtheta=1.):
+    """Calculate the corrected linear Fisher information from two data matrices.
+    https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004218
+
+    Parameters
+    ----------
+    x0 : ndarray (samples, dim)
+    x1 : ndarray (samples, dim)
+    dtheta : float
+        Change in stimulus between x0 and x1.
+
+    Returns
+    -------
+    Symmetric KL Divergence
+    """
+    c0 = (2 * T - N - 3.) / (2. * T - 2)
+    c1 = (2. * N) / (T * dtheta**2)
+
+    return (lfi(mu0, cov0, mu1, cov1, dtheta=dtheta) * c0) - c1
 
 
 def corrected_lfi_data(x0, x1, dtheta=1.):

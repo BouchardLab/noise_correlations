@@ -106,7 +106,6 @@ def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None):
     p0_and_1 = (np.logical_and(p1s < .05, p0s < .05)).sum()
     ax1.bar([0, 1, 2], [p0_not_1, p1_not_0, p0_and_1], color=cs, alpha=.3)
     n = max(max(p0_not_1, p1_not_0), p0_and_1)
-    dec = int(np.ceil(np.log10(n)))
     ax1.set_yticks([])
     ax1.set_xticks([])
     ax1.set_xticklabels(['$\in$Purp.', '$\in$Br.'])
