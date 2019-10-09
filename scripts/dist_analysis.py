@@ -17,6 +17,8 @@ from mpi_utils.ndarray import Bcast_from_root
 parser = argparse.ArgumentParser(description='Run noise correlations analysis.')
 parser.add_argument('folder', type=str,
                     help='Base folder where all datasets are stored.')
+parser.add_argument('save_folder', type=str,
+                    help='Folder where results will be saved.')
 parser.add_argument('dataset', choices=['kohn'],
                     help='Which dataset to run analysis on.')
 parser.add_argument('dim', type=int,
@@ -27,6 +29,7 @@ parser.add_argument('--n_samples', '-s', type=int, default=10000,
                     help='How many dimlets to consider.')
 args = parser.parse_args()
 folder = args.folder
+save_folder = save_args.folder
 dataset = args.dataset
 dim = args.dim
 n_dimlets = args.n_dimlets
@@ -54,7 +57,7 @@ X = Bcast_from_root(X, comm)
                                               circular_stim=circular_stim)
 if rank == 0:
     save_name = '{}_{}_{}.npz'.format(dim, n_dimlets, n_samples)
-    save_name = os.path.join(path, save_name)
+    save_name = os.path.join(save_folder, save_name)
     np.savez(save_name,
              p_s_lfi=p_s_lfi, p_s_sdkl=p_s_sdkl,
              p_r_lfi=p_r_lfi, p_r_sdkl=p_r_sdkl,
