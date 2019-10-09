@@ -29,7 +29,7 @@ parser.add_argument('--n_samples', '-s', type=int, default=10000,
                     help='How many dimlets to consider.')
 args = parser.parse_args()
 folder = args.folder
-save_folder = save_args.folder
+save_folder = args.save_folder
 dataset = args.dataset
 dim = args.dim
 n_dimlets = args.n_dimlets
