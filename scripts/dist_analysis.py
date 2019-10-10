@@ -23,11 +23,12 @@ parser.add_argument('dataset', choices=['kohn'],
                     help='Which dataset to run analysis on.')
 parser.add_argument('dim', type=int,
                     help='How many units to operate on.')
-parser.add_argument('--n_dimlets', '-n', type=int, default=10000,
+parser.add_argument('--n_dimlets', '-n', type=int, default=1000,
                     help='How many dimlets to consider.')
 parser.add_argument('--n_samples', '-s', type=int, default=10000,
                     help='How many dimlets to consider.')
 args = parser.parse_args()
+
 folder = args.folder
 save_folder = args.save_folder
 dataset = args.dataset
@@ -47,6 +48,11 @@ if dataset == 'kohn':
         path = os.path.join(folder, 'kohn_pvc-11')
         ds = datasets.KohnCRCNSpvc11_monkey(path)
         X = ds.data_tensor()
+        trial_median = np.median(X, axis=-1)
+        keep = np.logical_and(trial_median.max(axis=-1) >= 10,
+                              trial_median.max(axis=-1) >= 2.0 * trial_median.min(axis=-1))
+        X = X[keep]
+
 X = Bcast_from_root(X, comm)
 
 
@@ -56,7 +62,7 @@ X = Bcast_from_root(X, comm)
                                               comm, n_samples=n_samples,
                                               circular_stim=circular_stim)
 if rank == 0:
-    save_name = '{}_{}_{}.npz'.format(dim, n_dimlets, n_samples)
+    save_name = '{}_{}_{}_{}.npz'.format(dataset_dim, n_dimlets, n_samples)
     save_name = os.path.join(save_folder, save_name)
     np.savez(save_name,
              p_s_lfi=p_s_lfi, p_s_sdkl=p_s_sdkl,
