@@ -170,8 +170,6 @@ def dist_compare_nulls_measures(X, dim, n_dimlets, rng, comm,
     stims = np.array_split(stims, size)[rank]
 
     my_dimlets = units.shape[0]
-
-
     p_s_lfi = np.zeros(my_dimlets)
     p_s_sdkl = np.zeros(my_dimlets)
     p_r_lfi = np.zeros(my_dimlets)

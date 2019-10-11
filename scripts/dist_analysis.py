@@ -19,7 +19,7 @@ parser.add_argument('folder', type=str,
                     help='Base folder where all datasets are stored.')
 parser.add_argument('save_folder', type=str,
                     help='Folder where results will be saved.')
-parser.add_argument('dataset', choices=['kohn'],
+parser.add_argument('dataset', choices=['kohn', 'maxd'],
                     help='Which dataset to run analysis on.')
 parser.add_argument('dim', type=int,
                     help='How many units to operate on.')
@@ -52,6 +52,18 @@ if dataset == 'kohn':
         keep = np.logical_and(trial_median.max(axis=-1) >= 10,
                               trial_median.max(axis=-1) >= 2.0 * trial_median.min(axis=-1))
         X = X[keep]
+elif dataset == 'maxd':
+    circular_stim = False
+    if rank == 0:
+        path = os.path.join(folder, 'R32_B7_HG_ext_rsp.h5')
+        with h5py.File(fname, 'r') as f:
+            resp = f['final_rsp'][:]
+            X = np.transpose(resp[..., 5], axes=(0, 2, 1))
+            trial_medians = np.median(X, axis=-1)
+            keep = (trial_medians.max(axis=1) - trial_medians.min(axis=1)) >= 3.
+            X = X[keep]
+else:
+    raise ValueError
 
 X = Bcast_from_root(X, comm)
 
