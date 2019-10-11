@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.special import comb
+from itertools import combinations
 
 from . null_models import shuffle_data, random_rotation
 from .utils import mean_cov
@@ -112,7 +113,8 @@ def compare_nulls_measures(X, dim, n_dimlets, rng, n_samples=10000,
 
 
 def dist_compare_nulls_measures(X, dim, n_dimlets, rng, comm,
-                                n_samples=10000, circular_stim=False):
+                                n_samples=10000, circular_stim=False,
+                                all_stim=True):
     """Compare p-values across null models.
 
     Parameters
@@ -128,12 +130,42 @@ def dist_compare_nulls_measures(X, dim, n_dimlets, rng, comm,
     size = comm.size
     rank = comm.rank
 
-    units = np.zeros((n_dimlets, dim), dtype=int)
-    stims = np.zeros((n_dimlets, 2), dtype=int)
-    for ii in range(n_dimlets):
-        unit_idxs, stim_idxs = generate_dimlet(X, dim, rng, circular_stim)
-        units[ii] = unit_idxs
-        stims[ii] = stim_idxs
+    if all_stim:
+        if circular_stim:
+            stims = np.arange(n_stimuli)
+        else:
+            stims = np.arange(n_stimuli - 1)
+        if n_dimlets >= comb(n_units, dim, exact=True):
+            units = np.array(list(combinations(np.arange(n_units), dim)))
+        else:
+            units = np.zeros((n_dimlets, dim), dtype=int)
+            for ii in range(n_dimlets):
+                unit_idxs, _ = generate_dimlet(X, dim, rng, circular_stim)
+                units[ii] = unit_idxs
+        n_comb = units.shape[0]
+        n_stim = stims.shape[0]
+        units = np.concatenate([units] * n_stim)
+        stims = np.tile(stims[np.newaxis], (n_comb, 1)).T.ravel()
+        stims = np.stack([stims, stims + 1], axis=-1)
+        if circular_stim:
+            stims = np.mod(stims, n_stimuli)
+    else:
+        if n_dimlets >= comb(n_units, dim, exact=True):
+            units = np.array(list(combinations(np.arange(n_units), dim)))
+            if circular_stim:
+                stims = rng.randint(n_stimuli, size=units.shape[0])
+            else:
+                stims = rng.randint(n_stimuli - 1, size=units.shape[0])
+            stims = np.concatenate([stims, stims + 1])
+            if circular_stim:
+                stims = np.mod(stims, n_stimuli)
+        else:
+            units = np.zeros((n_dimlets, dim), dtype=int)
+            stims = np.zeros((n_dimlets, 2), dtype=int)
+            for ii in range(n_dimlets):
+                unit_idxs, stim_idxs = generate_dimlet(X, dim, rng, circular_stim)
+                units[ii] = unit_idxs
+                stims[ii] = stim_idxs
     units = np.array_split(units, size)[rank]
     stims = np.array_split(stims, size)[rank]
 
