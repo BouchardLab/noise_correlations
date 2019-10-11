@@ -1,4 +1,4 @@
-import argparse, os, glob
+import argparse, os, glob, h5py
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -56,7 +56,7 @@ elif dataset == 'maxd':
     circular_stim = False
     if rank == 0:
         path = os.path.join(folder, 'R32_B7_HG_ext_rsp.h5')
-        with h5py.File(fname, 'r') as f:
+        with h5py.File(path, 'r') as f:
             resp = f['final_rsp'][:]
             X = np.transpose(resp[..., 5], axes=(0, 2, 1))
             trial_medians = np.median(X, axis=-1)
