@@ -1,6 +1,5 @@
 import argparse, os, glob, h5py
 import numpy as np
-import matplotlib.pyplot as plt
 
 from mpi4py import MPI
 
@@ -8,7 +7,6 @@ from noise_correlations.data import datasets
 from noise_correlations import discriminability, null_models
 from noise_correlations.discriminability import lfi_data, lda_data, corrected_lfi_data, mv_normal_jeffreys_data
 from noise_correlations.null_models import random_rotation_data, shuffle_data
-from noise_correlations import plot
 from noise_correlations.analysis import dist_compare_nulls_measures
 
 from mpi_utils.ndarray import Bcast_from_root

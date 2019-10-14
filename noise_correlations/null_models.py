@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from . import discriminability
 from scipy.stats import special_ortho_group
 
