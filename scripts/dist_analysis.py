@@ -39,6 +39,9 @@ comm = MPI.COMM_WORLD
 size = comm.size
 rank = comm.rank
 
+if rank == 0:
+    print(dataset, dim)
+
 X = None
 if dataset == 'kohn':
     circular_stim = True
@@ -63,7 +66,11 @@ elif dataset == 'maxd':
 else:
     raise ValueError
 
+if rank == 0:
+    print(dataset, dim, 'load')
 X = Bcast_from_root(X, comm)
+if rank == 0:
+    print(dataset, dim, 'bcast')
 
 
 (p_s_lfi, p_s_sdkl,
@@ -72,9 +79,11 @@ X = Bcast_from_root(X, comm)
                                               comm, n_samples=n_samples,
                                               circular_stim=circular_stim)
 if rank == 0:
+    print(dataset, dim, 'presave')
     save_name = '{}_{}_{}_{}.npz'.format(dataset, dim, n_dimlets, n_samples)
     save_name = os.path.join(save_folder, save_name)
     np.savez(save_name,
              p_s_lfi=p_s_lfi, p_s_sdkl=p_s_sdkl,
              p_r_lfi=p_r_lfi, p_r_sdkl=p_r_sdkl,
              v_lfi=v_lfi, v_sdkl=v_sdkl)
+    print(dataset, dim, 'done')

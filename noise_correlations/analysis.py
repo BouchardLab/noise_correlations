@@ -182,6 +182,8 @@ def dist_compare_nulls_measures(X, dim, n_dimlets, rng, comm,
     v_sdkl = np.zeros(my_dimlets)
 
     for ii in range(my_dimlets):
+        if rank == 0:
+            print(dim, '{} out of {}'.format(ii+1, my_dimlets))
         unit_idxs, stim_idxs = units[ii], stims[ii]
         (vs_lfi, vs_sdkl,
          vr_lfi, vr_sdkl,
