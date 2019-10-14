@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.special import comb
+from scipy.stats import spearmanr as sr
 from itertools import combinations
 
 from . null_models import shuffle_data, random_rotation
@@ -10,7 +11,7 @@ from .discriminability import (corrected_lfi as clfi,
                                mv_normal_jeffreys_data as sdkl_data)
 
 
-def all_correlations(X):
+def all_correlations(X, spearmanr=False):
     """Compute all pairwise correlations.
 
     Parameters
@@ -25,7 +26,10 @@ def all_correlations(X):
     """
     corrs = []
     for s in range(X.shape[1]):
-        cc = np.corrcoef(X[:, s])
+        if spearmanr:
+            cc = sr(X[:, s], axis=1)[0]
+        else:
+            cc = np.corrcoef(X[:, s])
         idxs = np.triu_indices_from(cc, k=1)
         cc = cc[idxs[0], idxs[1]]
         corrs.append(cc)
