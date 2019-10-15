@@ -52,7 +52,8 @@ def generate_dimlet(X, dim, rng, circular_stim=False):
     return unit_idxs, stim_idxs
 
 
-def inner_compare_nulls_measures(X, unit_idxs, stim_idxs, rng, n_samples):
+def inner_compare_nulls_measures(X, unit_idxs, stim_idxs, rng, n_samples,
+                                 circular_stim=False):
     n_units, n_stimuli, n_trials = X.shape
     dim = unit_idxs.size
     Xu = X[unit_idxs]
@@ -60,7 +61,10 @@ def inner_compare_nulls_measures(X, unit_idxs, stim_idxs, rng, n_samples):
     X1 = Xu[:, stim_idxs[1]].T
     mu0, cov0 = mean_cov(X0)
     mu1, cov1 = mean_cov(X1)
-    v_lfi = clfi(mu0, cov0, mu1, cov1, n_trials, dim, dtheta=1.)
+    dtheta = np.diff(stim_idxs)
+    if circular_stim:
+        dtheta = min(dtheta, np.diff(stim_idxs[::-1]) + n_stimuli)
+    v_lfi = clfi(mu0, cov0, mu1, cov1, n_trials, dim, dtheta=dtheta)
     v_sdkl = sdkl(mu0, cov0, mu1, cov1)
     vs_lfi = np.zeros(n_samples)
     vs_sdkl = np.zeros(n_samples)
@@ -70,7 +74,7 @@ def inner_compare_nulls_measures(X, unit_idxs, stim_idxs, rng, n_samples):
         shuffle_X = shuffle_data(np.concatenate([X0, X1], axis=1))
         X0s = shuffle_X[:, :dim]
         X1s = shuffle_X[:, dim:]
-        vs_lfi[jj] = clfi_data(X0s, X1s, dtheta=1)
+        vs_lfi[jj] = clfi_data(X0s, X1s, dtheta=dtheta)
         vs_sdkl[jj] = sdkl_data(X0s, X1s)
         (mu0r, mu1r), (cov0r, cov1r) = random_rotation([mu0, mu1], [cov0, cov1], rng=rng)
         vr_lfi[jj] = clfi(mu0r, cov0r, mu1r, cov1r, n_samples, dim, dtheta=1)
@@ -201,4 +205,70 @@ def dist_compare_nulls_measures(X, dim, n_dimlets, rng, comm,
     p_s_sdkl = Gatherv_rows(p_s_sdkl, comm)
     p_r_lfi = Gatherv_rows(p_r_lfi, comm)
     p_r_sdkl = Gatherv_rows(p_r_sdkl, comm)
+    v_lfi = Gatherv_rows(v_lfi, comm)
+    v_sdkl = Gatherv_rows(v_sdkl, comm)
     return p_s_lfi, p_s_sdkl, p_r_lfi, p_r_sdkl, v_lfi, v_sdkl
+
+
+def dist_compare_dtheta(X, dim, n_dimlets, rng, comm, n_samples=10000,
+                        circular_stim=True):
+    """Compare p-values across null models.
+
+    Parameters
+    ----------
+    X: ndarray (units, stimuli, trials)
+        Neural data.
+    dim: int
+        Number of units to consider.
+    """
+    from mpi_utils.ndarray import Gatherv_rows
+
+    n_units, n_stimuli, n_trials = X.shape
+    size = comm.size
+    rank = comm.rank
+
+    stims = np.array(list(combinations(np.arange(n_stimuli), 2)))
+    if n_dimlets >= comb(n_units, dim, exact=True):
+        units = np.array(list(combinations(np.arange(n_units), dim)))
+    else:
+        units = np.zeros((n_dimlets, dim), dtype=int)
+        for ii in range(n_dimlets):
+            unit_idxs, _ = generate_dimlet(X, dim, rng, circular_stim)
+            units[ii] = unit_idxs
+    n_comb = units.shape[0]
+    n_stim = stims.shape[0]
+    units = np.concatenate([units] * n_stim)
+    o_stims = np.tile(stims[:, np.newaxis], (1, n_comb, 1)).reshape(-1, 2)
+    units = np.array_split(units, size)[rank]
+    stims = np.array_split(o_stims, size)[rank]
+
+    my_dimlets = units.shape[0]
+    v_lfi = np.zeros(my_dimlets)
+    v_sdkl = np.zeros(my_dimlets)
+    p_s_lfi = np.zeros(my_dimlets)
+    p_s_sdkl = np.zeros(my_dimlets)
+    p_r_lfi = np.zeros(my_dimlets)
+    p_r_sdkl = np.zeros(my_dimlets)
+
+    for ii in range(my_dimlets):
+        unit_idxs, stim_idxs = units[ii], stims[ii]
+        stim_idxs = np.sort(stim_idxs)
+        (vs_lfi, vs_sdkl,
+         vr_lfi, vr_sdkl,
+         vi_lfi, vi_sdkl) = inner_compare_nulls_measures(X, unit_idxs,
+                                                       stim_idxs,
+                                                       rng,
+                                                       n_samples)
+        v_lfi[ii] = vi_lfi
+        v_sdkl[ii] = vi_sdkl
+        p_s_lfi[ii] = np.mean(vs_lfi >= v_lfi[ii])
+        p_s_sdkl[ii] = np.mean(vs_sdkl >= v_sdkl[ii])
+        p_r_lfi[ii] = np.mean(vr_lfi >= v_lfi[ii])
+        p_r_sdkl[ii] = np.mean(vr_sdkl >= v_sdkl[ii])
+    p_s_lfi = Gatherv_rows(p_s_lfi, comm)
+    p_s_sdkl = Gatherv_rows(p_s_sdkl, comm)
+    p_r_lfi = Gatherv_rows(p_r_lfi, comm)
+    p_r_sdkl = Gatherv_rows(p_r_sdkl, comm)
+    v_lfi = Gatherv_rows(v_lfi, comm)
+    v_sdkl = Gatherv_rows(v_sdkl, comm)
+    return p_s_lfi, p_s_sdkl, p_r_lfi, p_r_sdkl, v_lfi, v_sdkl, o_stims
