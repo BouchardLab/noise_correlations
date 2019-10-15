@@ -5,8 +5,7 @@ from itertools import combinations
 
 from . null_models import shuffle_data, random_rotation
 from .utils import mean_cov
-from .discriminability import (corrected_lfi as clfi,
-                               corrected_lfi_data as clfi_data,
+from .discriminability import (lfi, lfi_data,
                                mv_normal_jeffreys as sdkl,
                                mv_normal_jeffreys_data as sdkl_data)
 
@@ -64,7 +63,7 @@ def inner_compare_nulls_measures(X, unit_idxs, stim_idxs, rng, n_samples,
     dtheta = np.diff(stim_idxs)
     if circular_stim:
         dtheta = min(dtheta, np.diff(stim_idxs[::-1]) + n_stimuli)
-    v_lfi = clfi(mu0, cov0, mu1, cov1, n_trials, dim, dtheta=dtheta)
+    v_lfi = lfi(mu0, cov0, mu1, cov1, n_trials, dim, dtheta=dtheta)
     v_sdkl = sdkl(mu0, cov0, mu1, cov1)
     vs_lfi = np.zeros(n_samples)
     vs_sdkl = np.zeros(n_samples)
@@ -73,7 +72,7 @@ def inner_compare_nulls_measures(X, unit_idxs, stim_idxs, rng, n_samples,
     for jj in range(n_samples):
         X0s = shuffle_data(X0, rng=rng)
         X1s = shuffle_data(X1, rng=rng)
-        vs_lfi[jj] = clfi_data(X0s, X1s, dtheta=dtheta)
+        vs_lfi[jj] = lfi_data(X0s, X1s, dtheta=dtheta)
         vs_sdkl[jj] = sdkl_data(X0s, X1s)
         (mu0r, mu1r), (cov0r, cov1r) = random_rotation([mu0, mu1], [cov0, cov1], rng=rng)
         vr_lfi[jj] = clfi(mu0r, cov0r, mu1r, cov1r, n_samples, dim, dtheta=1)

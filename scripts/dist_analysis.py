@@ -51,7 +51,7 @@ if dataset == 'kohn':
         ds = datasets.KohnCRCNSpvc11_monkey(path)
         X = ds.data_tensor()
         trial_median = np.median(X, axis=-1)
-        keep = np.logical_and(trial_median.max(axis=-1) >= 10,
+        keep = np.logical_and(trial_median.max(axis=-1) >= 15,
                               trial_median.max(axis=-1) >= 2.0 * trial_median.min(axis=-1))
         X = X[keep]
 elif dataset == 'maxd':
@@ -62,7 +62,7 @@ elif dataset == 'maxd':
             resp = f['final_rsp'][:]
             X = np.transpose(resp[..., 5], axes=(0, 2, 1))
             trial_medians = np.median(X, axis=-1)
-            keep = (trial_medians.max(axis=1) - trial_medians.min(axis=1)) >= 3.
+            keep = (trial_medians.max(axis=1) - trial_medians.min(axis=1)) >= 5.
             X = X[keep]
 else:
     raise ValueError

@@ -328,7 +328,7 @@ def lfi_shuffle_data(x0, x1, dtheta=1.):
 
     dmu_dtheta = (mu1 - mu0) / dtheta
 
-    return np.sum(dmu_dtheta**2 / var)
+    return np.dot(dmu_dtheta**2, var)
 
 
 def corrected_lfi_shuffle_data(x0, x1, dtheta=1.):
