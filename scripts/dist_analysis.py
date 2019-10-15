@@ -40,6 +40,7 @@ size = comm.size
 rank = comm.rank
 
 if rank == 0:
+    print(size, rank)
     print(dataset, dim)
 
 X = None

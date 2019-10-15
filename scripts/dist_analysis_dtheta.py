@@ -21,7 +21,7 @@ parser.add_argument('dataset', choices=['kohn', 'maxd'],
                     help='Which dataset to run analysis on.')
 parser.add_argument('dim', type=int,
                     help='How many units to operate on.')
-parser.add_argument('--n_dimlets', '-n', type=int, default=1000,
+parser.add_argument('--n_dimlets', '-n', type=int, default=100,
                     help='How many dimlets to consider.')
 parser.add_argument('--n_samples', '-s', type=int, default=10000,
                     help='How many dimlets to consider.')
@@ -39,6 +39,8 @@ comm = MPI.COMM_WORLD
 size = comm.size
 rank = comm.rank
 
+if rank == 0:
+    print(dataset, dim)
 X = None
 if dataset == 'kohn':
     circular_stim = True
@@ -63,7 +65,11 @@ elif dataset == 'maxd':
 else:
     raise ValueError
 
+if rank == 0:
+    print('loaded', dataset, dim)
 X = Bcast_from_root(X, comm)
+if rank == 0:
+    print('bcast', dataset, dim)
 
 (p_s_lfi, p_s_sdkl,
  p_r_lfi, p_r_sdkl,
@@ -71,9 +77,11 @@ X = Bcast_from_root(X, comm)
                                              comm, n_samples=n_samples,
                                              circular_stim=circular_stim)
 if rank == 0:
+    print('presave', dataset, dim)
     save_name = '{}_{}_{}_dtheta.npz'.format(dataset, dim, n_dimlets)
     save_name = os.path.join(save_folder, save_name)
     np.savez(save_name,
              p_s_lfi=p_s_lfi, p_s_sdkl=p_s_sdkl,
              p_r_lfi=p_r_lfi, p_r_sdkl=p_r_sdkl,
              v_lfi=v_lfi, v_sdkl=v_sdkl, stims=stims)
+    print('done', dataset, dim)

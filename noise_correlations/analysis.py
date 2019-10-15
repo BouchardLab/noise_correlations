@@ -250,6 +250,8 @@ def dist_compare_dtheta(X, dim, n_dimlets, rng, comm, n_samples=10000,
     p_r_sdkl = np.zeros(my_dimlets)
 
     for ii in range(my_dimlets):
+        if rank == 0:
+            print(dim, '{} out of {}'.format(ii + 1, my_dimlets))
         unit_idxs, stim_idxs = units[ii], stims[ii]
         stim_idxs = np.sort(stim_idxs)
         (vs_lfi, vs_sdkl,
