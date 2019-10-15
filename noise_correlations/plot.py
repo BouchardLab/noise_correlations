@@ -105,20 +105,27 @@ def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None, cs='null'):
     edge = .175
     size = .35
     ax1 = f.add_axes([pos.x0 + edge * w, pos.y0 + edge * h / 2., size * w, size * h])
-    ax1.set_xlabel('Total: {}'.format(p0s.size))
-    p0_not_1 = (np.logical_and(p0s < .05, p1s >= .05)).sum()
-    p1_not_0 = (np.logical_and(p1s < .05, p0s >= .05)).sum()
-    p0_and_1 = (np.logical_and(p1s < .05, p0s < .05)).sum()
+    total = p0s.size
+    ax1.set_xlabel('Total: {}'.format(total))
+    p0_not_1 = (np.logical_and(p0s < .05, p1s >= .05)).sum() / total
+    p1_not_0 = (np.logical_and(p1s < .05, p0s >= .05)).sum() / total
+    p0_and_1 = (np.logical_and(p1s < .05, p0s < .05)).sum() / total
     ax1.bar([0, 1, 2], [p0_not_1, p1_not_0, p0_and_1], color=cs, alpha=.3)
     n = max(max(p0_not_1, p1_not_0), p0_and_1)
     ax1.set_yticks([])
     ax1.set_xticks([])
     ax1.set_xticklabels(['$\in$Purp.', '$\in$Br.'])
     ax1.set_xticklabels(['', ''])
-    ax1.set_ylabel('Counts')
-    ax1.text(0, n, p0_not_1, va='top', ha='center')
-    ax1.text(1, n, p1_not_0, va='top', ha='center')
-    ax1.text(2, n, p0_and_1, va='top', ha='center')
+    ax1.set_ylabel('Frac.')
+    dec = int(p0_not_1*10)
+    hun = int(np.around(p0_not_1*100 - 10*dec))
+    ax1.text(0, n, '.{}{}'.format(dec, hun), va='top', ha='center')
+    dec = int(p1_not_0*10)
+    hun = int(np.around(p1_not_0*100 - 10*dec))
+    ax1.text(1, n, '.{}{}'.format(dec, hun), va='top', ha='center')
+    dec = int(p0_and_1*10)
+    hun = int(np.around(p0_and_1*100 - 10*dec))
+    ax1.text(2, n, '.{}{}'.format(dec, hun), va='top', ha='center')
     return faxes
 
 

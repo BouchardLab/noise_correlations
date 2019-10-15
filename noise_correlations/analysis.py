@@ -71,9 +71,8 @@ def inner_compare_nulls_measures(X, unit_idxs, stim_idxs, rng, n_samples,
     vr_lfi = np.zeros(n_samples)
     vr_sdkl = np.zeros(n_samples)
     for jj in range(n_samples):
-        shuffle_X = shuffle_data(np.concatenate([X0, X1], axis=1))
-        X0s = shuffle_X[:, :dim]
-        X1s = shuffle_X[:, dim:]
+        X0s = shuffle_data(X0, rng=rng)
+        X1s = shuffle_data(X1, rng=rng)
         vs_lfi[jj] = clfi_data(X0s, X1s, dtheta=dtheta)
         vs_sdkl[jj] = sdkl_data(X0s, X1s)
         (mu0r, mu1r), (cov0r, cov1r) = random_rotation([mu0, mu1], [cov0, cov1], rng=rng)
