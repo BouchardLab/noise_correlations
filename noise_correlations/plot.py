@@ -68,7 +68,8 @@ def scatter_blanche_ps(Yp, n_boot, ps=None, faxes=None):
     return ps, faxes
 
 
-def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None, cs='null'):
+def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None, cs='null',
+                           heatmap=False):
     if cs == 'null':
         cs = [u'#9467bd', u'#8c564b', u'#17becf']
     elif cs == 'measure':
@@ -79,10 +80,13 @@ def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None, cs='null'):
         faxes = plt.subplots(1, figsize=(5, 5))
     f, ax = faxes
     pos = ax.get_position()
-    print(pos)
     p0s[p0s == 0] = p0s[p0s > 0].min()
     p1s[p1s == 0] = p1s[p1s > 0].min()
-    ax.scatter(p0s, p1s, marker='.', c='k')
+    if heatmap:
+        ax.hexbin(p0s, p1s, cmap='gray_r', mincnt=1, xscale='log', yscale='log',
+                  extent=[-4, 1, -4, 1], gridsize=40, bins='log')
+    else:
+        ax.scatter(p0s, p1s, marker='.', c='k')
     if m is None:
         m = np.power(10., np.floor(np.log10(min(p0s.min(), p1s.min()))))
     ax.plot([m, 1], [m, 1], c='k')
@@ -117,12 +121,15 @@ def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None, cs='null'):
     ax1.set_xticklabels(['$\in$Purp.', '$\in$Br.'])
     ax1.set_xticklabels(['', ''])
     ax1.set_ylabel('Frac.')
+    p0_not_1 = np.around(p0_not_1, 2)
     dec = int(p0_not_1*10)
     hun = int(np.around(p0_not_1*100 - 10*dec))
     ax1.text(0, n, '.{}{}'.format(dec, hun), va='top', ha='center')
+    p1_not_0 = np.around(p1_not_0, 2)
     dec = int(p1_not_0*10)
     hun = int(np.around(p1_not_0*100 - 10*dec))
     ax1.text(1, n, '.{}{}'.format(dec, hun), va='top', ha='center')
+    p0_and_1 = np.around(p0_and_1, 2)
     dec = int(p0_and_1*10)
     hun = int(np.around(p0_and_1*100 - 10*dec))
     ax1.text(2, n, '.{}{}'.format(dec, hun), va='top', ha='center')

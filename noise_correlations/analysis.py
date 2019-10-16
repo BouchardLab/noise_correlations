@@ -1,10 +1,11 @@
 import numpy as np
 from scipy.special import comb
 from scipy.stats import spearmanr as sr
+from scipy.stats import special_ortho_group as sog
 from itertools import combinations
 
 from . null_models import shuffle_data, random_rotation
-from .utils import mean_cov
+from .utils import mean_cov, uniform_correlation_matrix
 from .discriminability import (lfi, lfi_data,
                                mv_normal_jeffreys as sdkl,
                                mv_normal_jeffreys_data as sdkl_data)
@@ -75,7 +76,7 @@ def inner_compare_nulls_measures(X, unit_idxs, stim_idxs, rng, n_samples,
         vs_lfi[jj] = lfi_data(X0s, X1s, dtheta=dtheta)
         vs_sdkl[jj] = sdkl_data(X0s, X1s)
         (mu0r, mu1r), (cov0r, cov1r) = random_rotation([mu0, mu1], [cov0, cov1], rng=rng)
-        vr_lfi[jj] = clfi(mu0r, cov0r, mu1r, cov1r, n_samples, dim, dtheta=1)
+        vr_lfi[jj] = lfi(mu0r, cov0r, mu1r, cov1r, dtheta=dtheta)
         mu1r, cov1r = random_rotation(mu1, cov1, rng=rng)
         vr_sdkl[jj] = sdkl(mu0r, cov0r, mu1r, cov1r)
     return vs_lfi, vs_sdkl, vr_lfi, vr_sdkl, v_lfi, v_sdkl
@@ -272,3 +273,77 @@ def dist_compare_dtheta(X, dim, n_dimlets, rng, comm, n_samples=10000,
     v_lfi = Gatherv_rows(v_lfi, comm)
     v_sdkl = Gatherv_rows(v_sdkl, comm)
     return p_s_lfi, p_s_sdkl, p_r_lfi, p_r_sdkl, v_lfi, v_sdkl, o_stims
+
+
+def dist_synthetic_data(dim, n_deltas, n_rotations, rng, comm, dim_size=10,
+                        n_samples=10000):
+    """Compare p-values across null models.
+
+    Parameters
+    ----------
+    X: ndarray (units, stimuli, trials)
+        Neural data.
+    dim: int
+        Number of units to consider.
+    """
+    from mpi_utils.ndarray import Gatherv_rows
+
+    cov0 = uniform_correlation_matrix(dim, 5, .1, noise_std=0.01, rng=rng)
+    cov1 = cov0.copy()
+    deltas = np.logspace(-1.5, 0, n_deltas)
+    n_deltas = deltas.size
+    size = comm.size
+    rank = comm.rank
+
+    deltas = np.concatenate([deltas] * n_rotations)
+    my_deltas = np.array_split(deltas, size)[rank]
+    R0s = sog.rvs(dim, size=n_samples, random_state=rng)
+    R1s = sog.rvs(dim, size=n_samples, random_state=rng)
+
+    v_lfi = np.zeros(my_deltas.size)
+    v_sdkl = np.zeros(my_deltas.size)
+    p_s_lfi = np.zeros(my_deltas.size)
+    p_s_sdkl = np.zeros(my_deltas.size)
+    p_r_lfi = np.zeros(my_deltas.size)
+    p_r_sdkl = np.zeros(my_deltas.size)
+
+    for ii, delta in enumerate(my_deltas):
+        mu0 = delta * np.ones(dim) / np.sqrt(dim)
+        mu1 = -mu0
+        if rank == 0:
+            print(ii, '{} out of {}'.format(ii + 1, my_deltas.size))
+        X0_zm = rng.multivariate_normal([0., 0.], cov0, size=size)
+        X1_zm = rng.multivariate_normal([0., 0.], cov1, size=size)
+        r = sog.rvs(dim, random_state=rng)
+        X0 = X0_zm.dot(r) + mu0[np.newaxis]
+        r = sog.rvs(dim, random_state=rng)
+        X1 = X1_zm.dot(r) + mu1[np.newaxis]
+        vs_lfi = np.zeros(n_samples)
+        vs_sdkl = np.zeros(n_samples)
+        vr_lfi = np.zeros(n_samples)
+        vr_sdkl = np.zeros(n_samples)
+        mu0, cov0 = mean_cov(X0)
+        mu1, cov1 = mean_cov(X1)
+        v_lfi[ii] = lfi(mu0, cov0, mu1, cov1)
+        v_sdkl[ii] = sdkl(mu0, cov0, mu1, cov1)
+        for jj, (R0, R1) in enumerate(zip(R0s, R1s)):
+            X0s = shuffle_data(X0, rng=rng)
+            X1s = shuffle_data(X1, rng=rng)
+            vs_lfi[jj] = lfi_data(X0s, X1s)
+            vs_sdkl[jj] = sdkl_data(X0s, X1s)
+            cov0r = R0.dot(cov0.dot(R0.T))
+            cov1r = R0.dot(cov1.dot(R0.T))
+            vr_lfi[jj] = lfi(mu0, cov0r, mu1, cov1r)
+            cov1r = R1.dot(cov1.dot(R1.T))
+            vr_sdkl[jj] = sdkl(mu0, cov0r, mu1, cov1r)
+        p_s_lfi[ii] = np.mean(vs_lfi >= v_lfi[ii])
+        p_s_sdkl[ii] = np.mean(vs_sdkl >= v_sdkl[ii])
+        p_r_lfi[ii] = np.mean(vr_lfi >= v_lfi[ii])
+        p_r_sdkl[ii] = np.mean(vr_sdkl >= v_sdkl[ii])
+    p_s_lfi = Gatherv_rows(p_s_lfi, comm)
+    p_s_sdkl = Gatherv_rows(p_s_sdkl, comm)
+    p_r_lfi = Gatherv_rows(p_r_lfi, comm)
+    p_r_sdkl = Gatherv_rows(p_r_sdkl, comm)
+    v_lfi = Gatherv_rows(v_lfi, comm)
+    v_sdkl = Gatherv_rows(v_sdkl, comm)
+    return p_s_lfi, p_s_sdkl, p_r_lfi, p_r_sdkl, v_lfi, v_sdkl
