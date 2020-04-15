@@ -69,7 +69,7 @@ def scatter_blanche_ps(Yp, n_boot, ps=None, faxes=None):
 
 
 def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None, cs='null',
-                           heatmap=False):
+                           heatmap=False, insetfontsize=8):
     if cs == 'null':
         cs = [u'#9467bd', u'#8c564b', u'#17becf']
     elif cs == 'measure':
@@ -110,7 +110,7 @@ def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None, cs='null',
     size = .35
     ax1 = f.add_axes([pos.x0 + edge * w, pos.y0 + edge * h / 2., size * w, size * h])
     total = p0s.size
-    ax1.set_xlabel('Total: {}'.format(total))
+    ax1.set_xlabel('Total: {}'.format(total), fontsize=insetfontsize)
     p0_not_1 = (np.logical_and(p0s < .05, p1s >= .05)).sum() / total
     p1_not_0 = (np.logical_and(p1s < .05, p0s >= .05)).sum() / total
     p0_and_1 = (np.logical_and(p1s < .05, p0s < .05)).sum() / total
@@ -120,19 +120,19 @@ def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None, cs='null',
     ax1.set_xticks([])
     ax1.set_xticklabels(['$\in$Purp.', '$\in$Br.'])
     ax1.set_xticklabels(['', ''])
-    ax1.set_ylabel('Frac.')
+    ax1.set_ylabel('Frac.', fontsize=insetfontsize)
     p0_not_1 = np.around(p0_not_1, 2)
     dec = int(p0_not_1*10)
     hun = int(np.around(p0_not_1*100 - 10*dec))
-    ax1.text(0, n, '.{}{}'.format(dec, hun), va='top', ha='center')
+    ax1.text(0, n, '.{}{}'.format(dec, hun), va='top', ha='center', fontsize=insetfontsize)
     p1_not_0 = np.around(p1_not_0, 2)
     dec = int(p1_not_0*10)
     hun = int(np.around(p1_not_0*100 - 10*dec))
-    ax1.text(1, n, '.{}{}'.format(dec, hun), va='top', ha='center')
+    ax1.text(1, n, '.{}{}'.format(dec, hun), va='top', ha='center', fontsize=insetfontsize)
     p0_and_1 = np.around(p0_and_1, 2)
     dec = int(p0_and_1*10)
     hun = int(np.around(p0_and_1*100 - 10*dec))
-    ax1.text(2, n, '.{}{}'.format(dec, hun), va='top', ha='center')
+    ax1.text(2, n, '.{}{}'.format(dec, hun), va='top', ha='center', fontsize=insetfontsize)
     return faxes
 
 
@@ -255,3 +255,14 @@ def rot_plot_data(x0, x1, measure, nsamples=10000):
     print('Value: ', val)
     print('Fraction of rotations giving smaller values: ', frac)
     return val, frac, ax
+
+def median_ps(ps, dim, fax=None, label=None, dx=0., c='C0'):
+    if fax is None:
+        fax = plt.subplots(1)
+    f, ax = fax
+    ps = ps.copy()
+    ps[ps==0] = 1. / 1e4
+    ps = np.log10(ps)
+    med = np.median(ps)
+    yerr = abs(np.percentile(ps, [16, 84])[:, np.newaxis] - med)
+    ax.errorbar(dim - dx, med, yerr=yerr, c=c, fmt='.', label=label)

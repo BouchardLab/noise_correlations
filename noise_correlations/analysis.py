@@ -311,7 +311,7 @@ def dist_synthetic_data(dim, n_deltas, n_rotations, rng, comm, dim_size=10,
         mu0 = delta * np.ones(dim) / np.sqrt(dim)
         mu1 = -mu0
         if rank == 0:
-            print(ii, '{} out of {}'.format(ii + 1, my_deltas.size))
+            print('{} out of {}'.format(ii + 1, my_deltas.size))
         X0_zm = rng.multivariate_normal([0., 0.], cov0, size=size)
         X1_zm = rng.multivariate_normal([0., 0.], cov1, size=size)
         r = sog.rvs(dim, random_state=rng)

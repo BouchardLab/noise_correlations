@@ -1,6 +1,8 @@
 import numpy as np
+from sklearn.linear_model import LogisticRegression as LR
 from sklearn.discriminant_analysis import (QuadraticDiscriminantAnalysis as QDA,
                                            LinearDiscriminantAnalysis as LDA)
+from sklearn.metrics import log_loss
 import torch
 
 from .utils import mean_cov
@@ -187,6 +189,48 @@ def qda_samples(mu0, cov0, mu1, cov1, size=10000):
     x0 = np.random.multivariate_normal(mu0, cov0, size=size)
     x1 = np.random.multivariate_normal(mu1, cov1, size=size)
     return qda_data(x0, x1)
+
+
+def logistic_data(x0, x1):
+    """Calculate the training accuracy from a Linear
+    Discriminant Analysis (LDA) model from data.
+
+    Parameters
+    ----------
+    x0 : ndarray (samples, dim)
+    x1 : ndarray (samples, dim)
+
+    Returns
+    -------
+    LDA accuracy
+    """
+    X = np.concatenate((x0, x1))
+    Y = np.zeros(X.shape[0])
+    Y[:x0.shape[0]] = 1
+    model = LR(C=1e3, solver='lbfgs').fit(X, Y)
+    Yhat = model.predict_proba(X)
+    return np.mean(Yhat.argmax(axis=1) == Y), log_loss(Y, Yhat)
+
+
+def logistic_samples(mu0, cov0, mu1, cov1, size=10000):
+    """Calculate the training accuracy from a Linear
+    Discriminant Analysis (LDA) model from two normal distributions
+    by sampling from them.
+
+    Parameters
+    ----------
+    mu0 : ndarray (dim,)
+    cov0 : ndarray (dim, dim)
+    mu1 : ndarray (dim,)
+    cov1: ndarray (dim, dim)
+
+    Returns
+    -------
+    LDA accuracy
+    """
+    x0 = np.random.multivariate_normal(mu0, cov0, size=size)
+    x1 = np.random.multivariate_normal(mu1, cov1, size=size)
+    return logistic_data(x0, x1)
 
 
 def lfi(mu0, cov0, mu1, cov1, dtheta=1.):
