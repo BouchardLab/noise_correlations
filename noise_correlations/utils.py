@@ -2,6 +2,7 @@ import numpy as np
 
 from scipy.stats import special_ortho_group
 
+
 def mean_cov(x):
     """Calculate the mean and covariance of a data matrix.
 
