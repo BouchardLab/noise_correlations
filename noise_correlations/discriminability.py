@@ -245,7 +245,7 @@ def lfi(mu0, cov0, mu1, cov1, dtheta=1.):
 
     Returns
     -------
-    Symmetric KL Divergence
+    Linear Fisher information
     """
     use_torch = any([isinstance(item, torch.Tensor)
                      for item in [mu0, cov0, mu1, cov1]])
@@ -270,7 +270,7 @@ def lfi_data(x0, x1, dtheta=1.):
 
     Returns
     -------
-    Symmetric KL Divergence
+    Linear Fisher information
     """
     mu0, cov0 = mean_cov(x0)
     mu1, cov1 = mean_cov(x1)
@@ -291,7 +291,7 @@ def corrected_lfi(mu0, cov0, mu1, cov1, T, N, dtheta=1.):
 
     Returns
     -------
-    Symmetric KL Divergence
+    Corrected linear Fisher information
     """
     c0 = (2 * T - N - 3.) / (2. * T - 2)
     c1 = (2. * N) / (T * dtheta**2)
@@ -312,7 +312,7 @@ def corrected_lfi_data(x0, x1, dtheta=1.):
 
     Returns
     -------
-    Symmetric KL Divergence
+    Corrected linear Fisher information
     """
     T = x0.shape[0]
     N = x0.shape[1]
@@ -338,7 +338,7 @@ def corrected_lfi_samples(mu0, cov0, mu1, cov1, size=10000, dtheta=1.):
 
     Returns
     -------
-    Symmetric KL Divergence
+    Corrected linear Fisher information
     """
     x0 = np.random.multivariate_normal(mu0, cov0, size=size)
     x1 = np.random.multivariate_normal(mu1, cov1, size=size)
@@ -364,7 +364,7 @@ def lfi_shuffle_data(x0, x1, dtheta=1.):
 
     Returns
     -------
-    Symmetric KL Divergence
+    Linear Fisher information
     """
     mu0 = x0.mean(axis=0)
     mu1 = x1.mean(axis=0)
@@ -387,7 +387,7 @@ def corrected_lfi_shuffle_data(x0, x1, dtheta=1.):
 
     Returns
     -------
-    Symmetric KL Divergence
+    Linear Fisher information
     """
     T = x0.shape[0]
     N = x0.shape[1]

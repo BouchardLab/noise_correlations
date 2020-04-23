@@ -4,20 +4,22 @@ from scipy.stats import spearmanr as sr
 from scipy.stats import special_ortho_group as sog
 from itertools import combinations
 
-from . null_models import shuffle_data, random_rotation
+from .null_models import shuffle_data, random_rotation
 from .utils import mean_cov, uniform_correlation_matrix
 from .discriminability import (lfi, lfi_data,
                                mv_normal_jeffreys as sdkl,
                                mv_normal_jeffreys_data as sdkl_data)
 
 
-def all_correlations(X, spearmanr=False):
+def all_correlations(X, stimuli, spearmanr=False):
     """Compute all pairwise correlations.
 
     Parameters
     ----------
-    X: ndarray (units, stimuli, trials)
-        Neural data.
+    X : ndarray (samples, units)
+        Neural data design matrix.
+    stimuli : ndarray (samples,)
+        The stimulus value for each trial.
 
     Returns
     -------
@@ -25,93 +27,195 @@ def all_correlations(X, spearmanr=False):
         All pairwise correlations across stimuli.
     """
     corrs = []
-    for s in range(X.shape[1]):
+    unique_stimuli = np.unique(stimuli)
+    # get correlations across trials for unique stimuli
+    for stim in unique_stimuli:
+        # get responses corresponding to the current stimulus
+        X_stim = X[np.argwhere(stimuli == stim).ravel()].T
         if spearmanr:
-            cc = sr(X[:, s], axis=1)[0]
+            cc = sr(X_stim, axis=1)[0]
         else:
-            cc = np.corrcoef(X[:, s])
+            cc = np.corrcoef(X_stim)
         idxs = np.triu_indices_from(cc, k=1)
-        cc = cc[idxs[0], idxs[1]]
+        cc = cc[idxs]
         corrs.append(cc)
     corrs = np.concatenate(corrs)
-    corrs = corrs[~np.isnan(corrs)]
     return corrs
 
 
-def generate_dimlet(X, dim, rng, circular_stim=False):
-    n_units, n_stimuli, n_trials = X.shape
-    unit_idxs = rng.permutation(n_units)[:dim]
-    if circular_stim:
-        stim_idxs = rng.randint(n_stimuli - 1)
-        flip = 2 * rng.binomial(1, .5) - 1
-        stim_idxs = np.mod(np.array([stim_idxs, stim_idxs + flip]),
-                           n_stimuli)
-    else:
-        stim_idxs = rng.randint(n_stimuli - 1)
-        stim_idxs = np.array([stim_idxs, stim_idxs + 1])
-    return unit_idxs, stim_idxs
-
-
-def inner_compare_nulls_measures(X, unit_idxs, stim_idxs, rng, n_samples,
-                                 circular_stim=False):
-    n_units, n_stimuli, n_trials = X.shape
-    dim = unit_idxs.size
-    Xu = X[unit_idxs]
-    X0 = Xu[:, stim_idxs[0]].T
-    X1 = Xu[:, stim_idxs[1]].T
-    mu0, cov0 = mean_cov(X0)
-    mu1, cov1 = mean_cov(X1)
-    dtheta = np.diff(stim_idxs)
-    if circular_stim:
-        dtheta = min(dtheta, np.diff(stim_idxs[::-1]) + n_stimuli)
-    v_lfi = lfi(mu0, cov0, mu1, cov1, n_trials, dim, dtheta=dtheta)
-    v_sdkl = sdkl(mu0, cov0, mu1, cov1)
-    vs_lfi = np.zeros(n_samples)
-    vs_sdkl = np.zeros(n_samples)
-    vr_lfi = np.zeros(n_samples)
-    vr_sdkl = np.zeros(n_samples)
-    for jj in range(n_samples):
-        X0s = shuffle_data(X0, rng=rng)
-        X1s = shuffle_data(X1, rng=rng)
-        vs_lfi[jj] = lfi_data(X0s, X1s, dtheta=dtheta)
-        vs_sdkl[jj] = sdkl_data(X0s, X1s)
-        (mu0r, mu1r), (cov0r, cov1r) = random_rotation([mu0, mu1], [cov0, cov1], rng=rng)
-        vr_lfi[jj] = lfi(mu0r, cov0r, mu1r, cov1r, dtheta=dtheta)
-        mu1r, cov1r = random_rotation(mu1, cov1, rng=rng)
-        vr_sdkl[jj] = sdkl(mu0r, cov0r, mu1r, cov1r)
-    return vs_lfi, vs_sdkl, vr_lfi, vr_sdkl, v_lfi, v_sdkl
-
-
-def compare_nulls_measures(X, dim, n_dimlets, rng, n_samples=10000,
-                           circular_stim=False):
-    """Compare p-values across null models.
+def generate_dimlet(X, stimuli, dim, rng, is_stim_circular=False):
+    """Generates a random dimlet of given size from a neural design matrix and
+    a random pair of stimuli from a stimulus vector.
 
     Parameters
     ----------
-    X: ndarray (units, stimuli, trials)
-        Neural data.
-    dim: int
+    X : ndarray (samples, units)
+        Neural data design matrix.
+    stimuli : ndarray (samples,)
+        The stimulus value for each trial.
+    dim : int
         Number of units to consider.
-    """
-    n_units, n_stimuli, n_trials = X.shape
+    rng : RandomState
+        Random state instance.
+    is_stim_circular : bool
+        If True, stimulus values are assumed to be circular.
 
+    Returns
+    -------
+    unit_idxs : ndarray (dim,)
+        The indices for the units in the dimlet.
+    stim_vals : ndarray
+        The values of a randomly chosen pair of stimuli.
+    """
+    n_samples, n_units = X.shape
+    unique_stimuli = np.unique(stimuli)
+    n_stimuli = unique_stimuli.size
+    # get a random sub-population of size dim
+    unit_idxs = rng.permutation(n_units)[:dim]
+    # choose random unique stimulus
+    stim_idx = rng.randint(n_stimuli - 1)
+    # get a pair of random stimuli values
+    if is_stim_circular:
+        flip = 2 * rng.binomial(1, .5) - 1
+        stim_idxs = np.mod(np.array([stim_idx, stim_idx + flip]),
+                           n_stimuli)
+        stim_vals = np.sort(unique_stimuli[stim_idxs])
+    else:
+        stim_vals = unique_stimuli[[stim_idx, stim_idx + 1]]
+
+    return unit_idxs, stim_vals
+
+
+def inner_compare_nulls_measures(X, stimuli, unit_idxs, stim_vals, rng, n_reps,
+                                 circular_stim=None):
+    """Calculates values of metrics on a dimlet of a neural design matrix under
+    both the shuffled and rotation null models.
+
+    Parameters
+    ----------
+    X : ndarray (samples, units)
+        Neural data design matrix.
+    stimuli : ndarray (samples,)
+        The stimulus value for each trial.
+    unit_idxs : ndarray (dim,)
+        The indices for the units in the dimlet.
+    stim_vals : ndarray
+        The values of a randomly chosen pair of stimuli.
+    rng : RandomState
+        Random state instance.
+    n_reps : int
+        The number of repetitions to consider when evaluating null models.
+    circular_stim : None or float
+        If None, stimulus will not be treated as circular. If int, takes on the
+        value of the stimulus upper bound.
+
+    Returns
+    -------
+    v_s_lfi, v_s_sdkl : ndarray (reps,)
+        The values of the LFI/sDKL on the shuffled dimlets.
+
+    v_r_lfi, v_r_sdkl : ndarray (reps,)
+        The values of the LFI/sDKL on the rotated dimlets.
+
+    v_lfi, v_sdkl : float
+        The values of the LFI/sDKL on the original dimlet.
+    """
+    n_samples, n_units = X.shape
+    # segment design matrix according to stimuli and units
+    stim0_idx = np.argwhere(stimuli == stim_vals[0]).ravel()
+    stim1_idx = np.argwhere(stimuli == stim_vals[1]).ravel()
+    X0 = X[stim0_idx][:, unit_idxs]
+    X1 = X[stim1_idx][:, unit_idxs]
+    # sub-design matrix statistics
+    mu0, cov0 = mean_cov(X0)
+    mu1, cov1 = mean_cov(X1)
+    # calculate stimulus difference
+    dtheta = np.diff(stim_vals)
+    if circular_stim is not None:
+        dtheta = min(dtheta, np.diff(stim_vals[::-1]) + circular_stim)
+
+    # calculate values of LFI and sDKL for original datasets
+    v_lfi = lfi(mu0, cov0, mu1, cov1, dtheta=dtheta)
+    v_sdkl = sdkl(mu0, cov0, mu1, cov1)
+    # values for measures on shuffled data
+    v_s_lfi = np.zeros(n_reps)
+    v_s_sdkl = np.zeros(n_reps)
+    # values for measures on rotated data
+    v_r_lfi = np.zeros(n_reps)
+    v_r_sdkl = np.zeros(n_reps)
+
+    for jj in range(n_reps):
+        # shuffle null model
+        X0s = shuffle_data(X0, rng=rng)
+        X1s = shuffle_data(X1, rng=rng)
+        v_s_lfi[jj] = lfi_data(X0s, X1s, dtheta=dtheta)
+        v_s_sdkl[jj] = sdkl_data(X0s, X1s)
+        # rotation null model
+        (mu0r, mu1r), (cov0r, cov1r) = random_rotation([mu0, mu1], [cov0, cov1], rng=rng)
+        v_r_lfi[jj] = lfi(mu0r, cov0r, mu1r, cov1r, dtheta=dtheta)
+        mu1r, cov1r = random_rotation(mu1, cov1, rng=rng)
+        v_r_sdkl[jj] = sdkl(mu0r, cov0r, mu1r, cov1r)
+    return v_s_lfi, v_s_sdkl, v_r_lfi, v_r_sdkl, v_lfi, v_sdkl
+
+
+def compare_nulls_measures(X, stimuli, dim, n_dimlets, rng, n_reps=10000,
+                           circular_stim=None):
+    """Compare p-values across null models for linear Fisher information and
+    symmetric KL-divergence.
+
+    Parameters
+    ----------
+    X : ndarray (units, stimuli, trials)
+        Neural data.
+    stimuli : ndarray (samples,)
+        The stimulus value for each trial.
+    dim : int
+        Number of units to consider in each dimlet.
+    n_dimlets : int
+        The number of dimlets over which to average measures.
+    rng : RandomState
+        Random state instance.
+    n_reps : int
+        The number of repetitions to consider when evaluating null models.
+    circular_stim : None or float
+        If None, stimulus will not be treated as circular. If int, takes on the
+        value of the stimulus upper bound.
+
+    Returns
+    -------
+    p_s_lfi, p_s_sdkl : ndarray (reps,)
+        The p-values on the shuffled dimlets.
+
+    p_r_lfi, p_r_sdkl : ndarray (reps,)
+        The p-values on the rotated dimlets.
+
+    v_lfi, v_sdkl : float
+        The values of the LFI/sDKL on the original dimlet.
+    """
+    n_samples, n_units = X.shape
+    is_stim_circular = circular_stim is not None
+    # p-values for shuffled null model
     p_s_lfi = np.zeros(n_dimlets)
     p_s_sdkl = np.zeros(n_dimlets)
+    # p-values for rotation null model
     p_r_lfi = np.zeros(n_dimlets)
     p_r_sdkl = np.zeros(n_dimlets)
+    # values of metrics
     v_lfi = np.zeros(n_dimlets)
     v_sdkl = np.zeros(n_dimlets)
 
+    # calculate p-values over dimlets
     for ii in range(n_dimlets):
-        unit_idxs, stim_idxs = generate_dimlet(X, dim, rng, circular_stim)
+        unit_idxs, stim_vals = generate_dimlet(X, stimuli, dim, rng, is_stim_circular)
+        # calculate values under shuffle and rotation null models
         (vs_lfi, vs_sdkl,
          vr_lfi, vr_sdkl,
-         vi_lfi, vi_sdkl) = inner_compare_nulls_measures(X, unit_idxs,
-                                                       stim_idxs,
-                                                       rng,
-                                                       n_samples)
+         vi_lfi, vi_sdkl) = inner_compare_nulls_measures(X, stimuli, unit_idxs,
+                                                         stim_vals, rng, n_reps,
+                                                         circular_stim)
         v_lfi[ii] = vi_lfi
         v_sdkl[ii] = vi_sdkl
+        # calculate p-values
         p_s_lfi[ii] = np.mean(vs_lfi >= v_lfi[ii])
         p_s_sdkl[ii] = np.mean(vs_sdkl >= v_sdkl[ii])
         p_r_lfi[ii] = np.mean(vr_lfi >= v_lfi[ii])
@@ -186,14 +290,14 @@ def dist_compare_nulls_measures(X, dim, n_dimlets, rng, comm,
 
     for ii in range(my_dimlets):
         if rank == 0:
-            print(dim, '{} out of {}'.format(ii+1, my_dimlets))
+            print(dim, '{} out of {}'.format(ii + 1, my_dimlets))
         unit_idxs, stim_idxs = units[ii], stims[ii]
         (vs_lfi, vs_sdkl,
          vr_lfi, vr_sdkl,
          vi_lfi, vi_sdkl) = inner_compare_nulls_measures(X, unit_idxs,
-                                                       stim_idxs,
-                                                       rng,
-                                                       n_samples)
+                                                         stim_idxs,
+                                                         rng,
+                                                         n_samples)
         v_lfi[ii] = vi_lfi
         v_sdkl[ii] = vi_sdkl
         p_s_lfi[ii] = np.mean(vs_lfi >= v_lfi[ii])
@@ -257,9 +361,9 @@ def dist_compare_dtheta(X, dim, n_dimlets, rng, comm, n_samples=10000,
         (vs_lfi, vs_sdkl,
          vr_lfi, vr_sdkl,
          vi_lfi, vi_sdkl) = inner_compare_nulls_measures(X, unit_idxs,
-                                                       stim_idxs,
-                                                       rng,
-                                                       n_samples)
+                                                         stim_idxs,
+                                                         rng,
+                                                         n_samples)
         v_lfi[ii] = vi_lfi
         v_sdkl[ii] = vi_sdkl
         p_s_lfi[ii] = np.mean(vs_lfi >= v_lfi[ii])
