@@ -43,51 +43,157 @@ def all_correlations(X, stimuli, spearmanr=False):
     return corrs
 
 
-def generate_dimlet(X, stimuli, dim, rng, is_stim_circular=False):
+def generate_dimlet(n_units, n_dim, rng):
     """Generates a random dimlet of given size from a neural design matrix and
     a random pair of stimuli from a stimulus vector.
 
     Parameters
     ----------
-    X : ndarray (samples, units)
-        Neural data design matrix.
-    stimuli : ndarray (samples,)
-        The stimulus value for each trial.
-    dim : int
-        Number of units to consider.
+    n_units : int
+        The number of units in the population.
+    n_dim : int
+        The number of dimensions in the dimlet.
     rng : RandomState
         Random state instance.
-    is_stim_circular : bool
-        If True, stimulus values are assumed to be circular.
 
     Returns
     -------
-    unit_idxs : ndarray (dim,)
+    unit_idxs : ndarray (n_dim,)
         The indices for the units in the dimlet.
     stim_vals : ndarray
         The values of a randomly chosen pair of stimuli.
     """
-    n_samples, n_units = X.shape
+    unit_idxs = rng.permutation(n_units)[:n_dim]
+    return unit_idxs
+
+
+def generate_stim_pair(stimuli, rng, circular_stim=False):
+    """Generates a random dimlet of given size from a neural design matrix and
+    a random pair of stimuli from a stimulus vector.
+
+    Parameters
+    ----------
+    stimuli : ndarray (n_samples,)
+        The stimulus for each sample in the population.
+    rng : RandomState
+        Random state instance.
+    circular_stim : bool
+        Indicates whether the stimulus is circular.
+
+    Returns
+    -------
+    stim_vals : ndarray
+        The values of a randomly chosen pair of stimuli.
+    """
     unique_stimuli = np.unique(stimuli)
     n_stimuli = unique_stimuli.size
-    # get a random sub-population of size dim
-    unit_idxs = rng.permutation(n_units)[:dim]
-    # choose random unique stimulus
-    stim_idx = rng.randint(n_stimuli - 1)
-    # get a pair of random stimuli values
-    if is_stim_circular:
-        flip = 2 * rng.binomial(1, .5) - 1
-        stim_idxs = np.mod(np.array([stim_idx, stim_idx + flip]),
-                           n_stimuli)
-        stim_vals = np.sort(unique_stimuli[stim_idxs])
+
+    # choose random index for stimulus
+    if circular_stim:
+        stim_idx = rng.randint(n_stimuli)
     else:
-        stim_vals = unique_stimuli[[stim_idx, stim_idx + 1]]
+        stim_idx = rng.randint(n_stimuli - 1)
 
-    return unit_idxs, stim_vals
+    # get stim values from unique stimuli set
+    stim_vals = np.sort(np.array(
+        [unique_stimuli[stim_idx], unique_stimuli[(stim_idx + 1) % n_stimuli]]
+    ))
+    return stim_vals
 
 
-def inner_compare_nulls_measures(X, stimuli, unit_idxs, stim_vals, rng, n_reps,
-                                 circular_stim=None):
+def generate_dimlets_and_stim_pairs(
+    n_units, stimuli, n_dim, n_dimlets, rng, all_stim=True, circular_stim=False
+):
+    """Generates a set of dimlets and stimulus pairs collectively, based on
+    provided criteria.
+
+    Parameters
+    ----------
+    n_units : int
+        The number of units in the population.
+    stimuli : ndarray (n_samples,)
+        The stimulus for each sample in the population.
+    n_dim : int
+        The number of dimensions in the dimlet.
+    n_dimlets : int
+        The number of dimlets over which to average measures.
+    rng : RandomState
+        Random state instance.
+    all_stim : bool
+        If True, all neighboring pairs of stimuli are used for each dimlet.
+        If False, one stimulus pair is chosen randomly for each dimlet.
+    circular_stim : bool
+        Indicates whether the stimulus is circular.
+
+    Returns
+    -------
+    units : ndarray (n_sets, n_dim)
+        The units in each dimlet. The number of unique dimlets is given by
+        n_dimlets, but this array may contain repetitions corresponding
+        to multiple stimuli-pairs, depending on all_stim.
+    stims : ndarray (n_sets, n_dim)
+        The stimulus-pair for all comparisons to make. The pairs are chosen
+        to span all possible neighboring pairs for the stimuli (all_stim), or
+        randomly chosen for each dimlet.
+    """
+    unique_stimuli = np.unique(stimuli)
+    n_stimuli = unique_stimuli.size
+
+    # calculate maximum possible number of dimlets
+    max_dimlets = comb(n_units, n_dim, exact=True)
+
+    # each dimlet will be evaluated on all neighboring pairwise stim combinations
+    if all_stim:
+        # get left side of each stimulus pair
+        if circular_stim:
+            stim_idx = np.arange(n_stimuli)
+        else:
+            stim_idx = np.arange(n_stimuli - 1)
+        stims = np.stack([unique_stimuli[stim_idx],
+                          unique_stimuli[(stim_idx + 1) % n_stimuli]],
+                         axis=1)
+
+        # check if number of dimlets is greater than maximum possible
+        if n_dimlets >= max_dimlets:
+            units = np.array(list(combinations(np.arange(n_units), n_dim)))
+        else:
+            # otherwise, randomly choose dimlets
+            units = np.zeros((n_dimlets, n_dim), dtype=int)
+            for ii in range(n_dimlets):
+                units[ii] = generate_dimlet(n_units, n_dim, rng)
+
+        n_unit_sets = units.shape[0]
+        n_stim_sets = stims.shape[0]
+        # repeat the units for each stim-set
+        units = np.repeat(units, n_stim_sets, axis=0)
+        # repeat the stims for each dimlet
+        stims = np.repeat(stims, n_unit_sets, axis=0)
+
+    # dimlet and stim-pair are chosen randomly, together
+    else:
+        # if number of dimlets is too large, use all dimlets
+        if n_dimlets >= max_dimlets:
+            units = np.array(list(combinations(np.arange(n_units), n_dim)))
+            if circular_stim:
+                stim_idx = rng.randint(n_stimuli, size=units.shape[0])
+            else:
+                stim_idx = rng.randint(n_stimuli - 1, size=units.shape[0])
+            stims = np.stack([unique_stimuli[stim_idx],
+                              unique_stimuli[(stim_idx + 1) % n_stimuli]],
+                             axis=1)
+        else:
+            # choose each dimlet and stim-pair
+            units = np.zeros((n_dimlets, n_dim), dtype=int)
+            stims = np.zeros((n_dimlets, 2), dtype=int)
+            for ii in range(n_dimlets):
+                units[ii] = generate_dimlet(n_units, n_dim, rng)
+                stims[ii] = generate_stim_pair(stimuli, rng, circular_stim)
+
+    return units, stims
+
+
+def inner_compare_nulls_measures(X, stimuli, unit_idxs, stim_vals, rng, n_repeats,
+                                 circular_stim=False):
     """Calculates values of metrics on a dimlet of a neural design matrix under
     both the shuffled and rotation null models.
 
@@ -103,20 +209,17 @@ def inner_compare_nulls_measures(X, stimuli, unit_idxs, stim_vals, rng, n_reps,
         The values of a randomly chosen pair of stimuli.
     rng : RandomState
         Random state instance.
-    n_reps : int
+    n_repeats : int
         The number of repetitions to consider when evaluating null models.
-    circular_stim : None or float
-        If None, stimulus will not be treated as circular. If int, takes on the
-        value of the stimulus upper bound.
+    circular_stim : bool
+        Indicates whether the stimulus is circular.
 
     Returns
     -------
     v_s_lfi, v_s_sdkl : ndarray (reps,)
         The values of the LFI/sDKL on the shuffled dimlets.
-
     v_r_lfi, v_r_sdkl : ndarray (reps,)
         The values of the LFI/sDKL on the rotated dimlets.
-
     v_lfi, v_sdkl : float
         The values of the LFI/sDKL on the original dimlet.
     """
@@ -130,21 +233,22 @@ def inner_compare_nulls_measures(X, stimuli, unit_idxs, stim_vals, rng, n_reps,
     mu0, cov0 = mean_cov(X0)
     mu1, cov1 = mean_cov(X1)
     # calculate stimulus difference
-    dtheta = np.diff(stim_vals)
-    if circular_stim is not None:
-        dtheta = min(dtheta, np.diff(stim_vals[::-1]) + circular_stim)
+    if circular_stim:
+        dtheta = np.ediff1d(np.unique(stimuli))[0]
+    else:
+        dtheta = np.diff(stim_vals).item()
 
     # calculate values of LFI and sDKL for original datasets
     v_lfi = lfi(mu0, cov0, mu1, cov1, dtheta=dtheta)
     v_sdkl = sdkl(mu0, cov0, mu1, cov1)
     # values for measures on shuffled data
-    v_s_lfi = np.zeros(n_reps)
-    v_s_sdkl = np.zeros(n_reps)
+    v_s_lfi = np.zeros(n_repeats)
+    v_s_sdkl = np.zeros(n_repeats)
     # values for measures on rotated data
-    v_r_lfi = np.zeros(n_reps)
-    v_r_sdkl = np.zeros(n_reps)
+    v_r_lfi = np.zeros(n_repeats)
+    v_r_sdkl = np.zeros(n_repeats)
 
-    for jj in range(n_reps):
+    for jj in range(n_repeats):
         # shuffle null model
         X0s = shuffle_data(X0, rng=rng)
         X1s = shuffle_data(X1, rng=rng)
@@ -158,8 +262,8 @@ def inner_compare_nulls_measures(X, stimuli, unit_idxs, stim_vals, rng, n_reps,
     return v_s_lfi, v_s_sdkl, v_r_lfi, v_r_sdkl, v_lfi, v_sdkl
 
 
-def compare_nulls_measures(X, stimuli, dim, n_dimlets, rng, n_reps=10000,
-                           circular_stim=None):
+def compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, n_repeats=10000,
+                           circular_stim=False):
     """Compare p-values across null models for linear Fisher information and
     symmetric KL-divergence.
 
@@ -169,31 +273,27 @@ def compare_nulls_measures(X, stimuli, dim, n_dimlets, rng, n_reps=10000,
         Neural data.
     stimuli : ndarray (samples,)
         The stimulus value for each trial.
-    dim : int
+    n_dim : int
         Number of units to consider in each dimlet.
     n_dimlets : int
         The number of dimlets over which to average measures.
     rng : RandomState
         Random state instance.
-    n_reps : int
+    n_repeats : int
         The number of repetitions to consider when evaluating null models.
-    circular_stim : None or float
-        If None, stimulus will not be treated as circular. If int, takes on the
-        value of the stimulus upper bound.
+    circular_stim : bool
+        Indicates whether the stimulus is circular.
 
     Returns
     -------
     p_s_lfi, p_s_sdkl : ndarray (reps,)
         The p-values on the shuffled dimlets.
-
     p_r_lfi, p_r_sdkl : ndarray (reps,)
         The p-values on the rotated dimlets.
-
     v_lfi, v_sdkl : float
         The values of the LFI/sDKL on the original dimlet.
     """
     n_samples, n_units = X.shape
-    is_stim_circular = circular_stim is not None
     # p-values for shuffled null model
     p_s_lfi = np.zeros(n_dimlets)
     p_s_sdkl = np.zeros(n_dimlets)
@@ -206,77 +306,57 @@ def compare_nulls_measures(X, stimuli, dim, n_dimlets, rng, n_reps=10000,
 
     # calculate p-values over dimlets
     for ii in range(n_dimlets):
-        unit_idxs, stim_vals = generate_dimlet(X, stimuli, dim, rng, is_stim_circular)
+        unit_idxs = generate_dimlet(n_units, n_dim, rng)
+        stim_vals = generate_stim_pair(stimuli, rng, circular_stim)
         # calculate values under shuffle and rotation null models
-        (vs_lfi, vs_sdkl,
-         vr_lfi, vr_sdkl,
-         vi_lfi, vi_sdkl) = inner_compare_nulls_measures(X, stimuli, unit_idxs,
-                                                         stim_vals, rng, n_reps,
-                                                         circular_stim)
-        v_lfi[ii] = vi_lfi
-        v_sdkl[ii] = vi_sdkl
+        (v_s_lfi, v_s_sdkl,
+         v_r_lfi, v_r_sdkl,
+         v_lfi[ii], v_sdkl[ii]) = \
+            inner_compare_nulls_measures(
+                X=X, stimuli=stimuli, unit_idxs=unit_idxs, stim_vals=stim_vals,
+                rng=rng, n_repeats=n_repeats, circular_stim=circular_stim)
+
         # calculate p-values
-        p_s_lfi[ii] = np.mean(vs_lfi >= v_lfi[ii])
-        p_s_sdkl[ii] = np.mean(vs_sdkl >= v_sdkl[ii])
-        p_r_lfi[ii] = np.mean(vr_lfi >= v_lfi[ii])
-        p_r_sdkl[ii] = np.mean(vr_sdkl >= v_sdkl[ii])
+        p_s_lfi[ii] = np.mean(v_s_lfi >= v_lfi[ii])
+        p_s_sdkl[ii] = np.mean(v_s_sdkl >= v_sdkl[ii])
+        p_r_lfi[ii] = np.mean(v_r_lfi >= v_lfi[ii])
+        p_r_sdkl[ii] = np.mean(v_r_sdkl >= v_sdkl[ii])
     return p_s_lfi, p_s_sdkl, p_r_lfi, p_r_sdkl, v_lfi, v_sdkl
 
 
-def dist_compare_nulls_measures(X, dim, n_dimlets, rng, comm,
-                                n_samples=10000, circular_stim=False,
+def dist_compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, comm,
+                                n_repeats=10000, circular_stim=False,
                                 all_stim=True):
-    """Compare p-values across null models.
+    """Compare p-values across null models for linear Fisher information and
+    symmetric KL-divergence, in a distributed manner.
 
     Parameters
     ----------
-    X: ndarray (units, stimuli, trials)
+    X : ndarray (units, stimuli, trials)
         Neural data.
-    dim: int
-        Number of units to consider.
+    stimuli : ndarray (samples,)
+        The stimulus value for each trial.
+    n_dim : int
+        Number of units to consider in each dimlet.
+    n_dimlets : int
+        The number of dimlets over which to calculate p-values.
+    rng : RandomState
+        Random state instance.
+    n_repeats : int
+        The number of repetitions to consider when evaluating null models.
+    circular_stim : bool
+        Indicates whether the stimulus is circular.
+    all_stim : bool
+        If True, all consecutive pairs of stimuli are used.
     """
     from mpi_utils.ndarray import Gatherv_rows
 
-    n_units, n_stimuli, n_trials = X.shape
+    n_samples, n_units = X.shape
+
     size = comm.size
     rank = comm.rank
 
-    if all_stim:
-        if circular_stim:
-            stims = np.arange(n_stimuli)
-        else:
-            stims = np.arange(n_stimuli - 1)
-        if n_dimlets >= comb(n_units, dim, exact=True):
-            units = np.array(list(combinations(np.arange(n_units), dim)))
-        else:
-            units = np.zeros((n_dimlets, dim), dtype=int)
-            for ii in range(n_dimlets):
-                unit_idxs, _ = generate_dimlet(X, dim, rng, circular_stim)
-                units[ii] = unit_idxs
-        n_comb = units.shape[0]
-        n_stim = stims.shape[0]
-        units = np.concatenate([units] * n_stim)
-        stims = np.tile(stims[np.newaxis], (n_comb, 1)).T.ravel()
-        stims = np.stack([stims, stims + 1], axis=-1)
-        if circular_stim:
-            stims = np.mod(stims, n_stimuli)
-    else:
-        if n_dimlets >= comb(n_units, dim, exact=True):
-            units = np.array(list(combinations(np.arange(n_units), dim)))
-            if circular_stim:
-                stims = rng.randint(n_stimuli, size=units.shape[0])
-            else:
-                stims = rng.randint(n_stimuli - 1, size=units.shape[0])
-            stims = np.concatenate([stims, stims + 1])
-            if circular_stim:
-                stims = np.mod(stims, n_stimuli)
-        else:
-            units = np.zeros((n_dimlets, dim), dtype=int)
-            stims = np.zeros((n_dimlets, 2), dtype=int)
-            for ii in range(n_dimlets):
-                unit_idxs, stim_idxs = generate_dimlet(X, dim, rng, circular_stim)
-                units[ii] = unit_idxs
-                stims[ii] = stim_idxs
+    units, stims = generate_dimlets_and_stim_pairs()
     units = np.array_split(units, size)[rank]
     stims = np.array_split(stims, size)[rank]
 
@@ -290,7 +370,7 @@ def dist_compare_nulls_measures(X, dim, n_dimlets, rng, comm,
 
     for ii in range(my_dimlets):
         if rank == 0:
-            print(dim, '{} out of {}'.format(ii + 1, my_dimlets))
+            print(n_dim, '{} out of {}'.format(ii + 1, my_dimlets))
         unit_idxs, stim_idxs = units[ii], stims[ii]
         (vs_lfi, vs_sdkl,
          vr_lfi, vr_sdkl,
