@@ -330,6 +330,9 @@ def dist_compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, comm,
     """Compare p-values across null models for linear Fisher information and
     symmetric KL-divergence, in a distributed manner.
 
+    This function will calculate p-values for random dimlets, with neighboring
+    pairwise stimuli.
+
     Parameters
     ----------
     X : ndarray (units, stimuli, trials)
@@ -357,9 +360,11 @@ def dist_compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, comm,
     rank = comm.rank
 
     units, stims = generate_dimlets_and_stim_pairs()
+    # allocate units and stims to the current rank
     units = np.array_split(units, size)[rank]
     stims = np.array_split(stims, size)[rank]
 
+    # allocate storage for this rank's p-values
     my_dimlets = units.shape[0]
     p_s_lfi = np.zeros(my_dimlets)
     p_s_sdkl = np.zeros(my_dimlets)
@@ -371,19 +376,22 @@ def dist_compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, comm,
     for ii in range(my_dimlets):
         if rank == 0:
             print(n_dim, '{} out of {}'.format(ii + 1, my_dimlets))
-        unit_idxs, stim_idxs = units[ii], stims[ii]
-        (vs_lfi, vs_sdkl,
-         vr_lfi, vr_sdkl,
-         vi_lfi, vi_sdkl) = inner_compare_nulls_measures(X, unit_idxs,
-                                                         stim_idxs,
-                                                         rng,
-                                                         n_samples)
-        v_lfi[ii] = vi_lfi
-        v_sdkl[ii] = vi_sdkl
-        p_s_lfi[ii] = np.mean(vs_lfi >= v_lfi[ii])
-        p_s_sdkl[ii] = np.mean(vs_sdkl >= v_sdkl[ii])
-        p_r_lfi[ii] = np.mean(vr_lfi >= v_lfi[ii])
-        p_r_sdkl[ii] = np.mean(vr_sdkl >= v_sdkl[ii])
+        unit_idxs, stim_vals = units[ii], stims[ii]
+        # calculate values under shuffle and rotation null models
+        (v_s_lfi, v_s_sdkl,
+         v_r_lfi, v_r_sdkl,
+         v_lfi[ii], v_sdkl[ii]) = \
+            inner_compare_nulls_measures(
+                X=X, stimuli=stimuli, unit_idxs=unit_idxs, stim_vals=stim_vals,
+                rng=rng, n_repeats=n_repeats, circular_stim=circular_stim)
+
+        # calculate p-values
+        p_s_lfi[ii] = np.mean(v_s_lfi >= v_lfi[ii])
+        p_s_sdkl[ii] = np.mean(v_s_sdkl >= v_sdkl[ii])
+        p_r_lfi[ii] = np.mean(v_r_lfi >= v_lfi[ii])
+        p_r_sdkl[ii] = np.mean(v_r_sdkl >= v_sdkl[ii])
+
+    # gather p-values across ranks
     p_s_lfi = Gatherv_rows(p_s_lfi, comm)
     p_s_sdkl = Gatherv_rows(p_s_sdkl, comm)
     p_r_lfi = Gatherv_rows(p_r_lfi, comm)
