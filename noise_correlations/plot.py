@@ -6,6 +6,7 @@ from scipy.special import factorial
 from .discriminability import lfi_data, lda_data
 from .null_models import random_rotation_data, shuffle_data
 from . import null_models
+from . import utils
 
 
 def scatter_max_ps(Yp, n_boot, ps=None, faxes=None):
@@ -68,17 +69,32 @@ def scatter_blanche_ps(Yp, n_boot, ps=None, faxes=None):
     return ps, faxes
 
 
-def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None, cs='null',
+def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None, cs=None,
                            heatmap=False, insetfontsize=8):
-    if cs == 'null':
+    """Plots the p-value comparison between two null models.
+
+    Parameters
+    ----------
+    p0s, p1s : ndarray, (configurations,)
+        The p-values across dimlet and stimulus-pair configurations.
+
+    cs : string, list of strings, or None
+        Denotes which colors to use. If string, will use a pre-defined colormap.
+        If list of strings, must contain 3 hex color codes, denoting the
+        [top left region, bottom right region, bottom left region].
+    """
+    # handle colors
+    if cs is None:
         cs = [u'#9467bd', u'#8c564b', u'#17becf']
     elif cs == 'measure':
         cs = [u'#1f77b4', u'#ff7f0e', u'#2ca02c']
-    else:
-        raise ValueError
+    elif not isinstance(cs, list):
+        raise ValueError('Improper color key.')
+
     if faxes is None:
         faxes = plt.subplots(1, figsize=(5, 5))
     f, ax = faxes
+
     pos = ax.get_position()
     p0s[p0s == 0] = p0s[p0s > 0].min()
     p1s[p1s == 0] = p1s[p1s > 0].min()
@@ -122,18 +138,77 @@ def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None, cs='null',
     ax1.set_xticklabels(['', ''])
     ax1.set_ylabel('Frac.', fontsize=insetfontsize)
     p0_not_1 = np.around(p0_not_1, 2)
-    dec = int(p0_not_1*10)
-    hun = int(np.around(p0_not_1*100 - 10*dec))
+    dec = int(p0_not_1 * 10)
+    hun = int(np.around(p0_not_1 * 100 - 10 * dec))
     ax1.text(0, n, '.{}{}'.format(dec, hun), va='top', ha='center', fontsize=insetfontsize)
     p1_not_0 = np.around(p1_not_0, 2)
-    dec = int(p1_not_0*10)
-    hun = int(np.around(p1_not_0*100 - 10*dec))
+    dec = int(p1_not_0 * 10)
+    hun = int(np.around(p1_not_0 * 100 - 10 * dec))
     ax1.text(1, n, '.{}{}'.format(dec, hun), va='top', ha='center', fontsize=insetfontsize)
     p0_and_1 = np.around(p0_and_1, 2)
-    dec = int(p0_and_1*10)
-    hun = int(np.around(p0_and_1*100 - 10*dec))
+    dec = int(p0_and_1 * 10)
+    hun = int(np.around(p0_and_1 * 100 - 10 * dec))
     ax1.text(2, n, '.{}{}'.format(dec, hun), va='top', ha='center', fontsize=insetfontsize)
     return faxes
+
+
+def plot_tuning_curves(X, stimuli, n_cols=5, fax=None, include_points=False):
+    """Plots a set of tuning curves given a neural design matrix.
+
+    Parameters
+    ----------
+    X : ndarray (samples, units)
+        Neural data design matrix.
+    stimuli : ndarray (samples,)
+        The stimulus value for each trial.
+    n_cols : int
+        The number of columns in the subplot grid. Ignored if fax is not None.
+    fax : tuple of mpl.figure and mpl.axes, or None
+        The figure and axes. If None, a new set will be created.
+    include_points : bool
+        If True, the individual samples are included.
+
+    Returns
+    -------
+    fig, ax : mpl.figure and mpl.axes
+        The matplotlib axes objects, with tuning curves plotted.
+    """
+    n_samples, n_units, n_stimuli, unique_stimuli = utils.X_stimuli(X, stimuli)
+    # calculate number of rows and create figure axes
+    n_rows = np.ceil(n_units / n_cols)
+    fig, axes = utils.check_fax(fax, n_rows=n_rows, n_cols=n_cols,
+                                figsize=(1.5 * n_cols, 1.5 * n_rows))
+
+    # calculate tuning curves
+    tuning_curves = np.zeros((n_units, n_stimuli))
+    for idx, stimulus in enumerate(unique_stimuli):
+        tuning_curves[:, idx] = np.mean(X[stimuli == stimulus], axis=0)
+
+    # plot each tuning curve
+    for unit_idx, ax in enumerate(axes.ravel()):
+        # turn off subplot if we've gone past the number of units
+        if unit_idx >= n_units:
+            ax.axis('off')
+        else:
+            # plot individual samples if necessary
+            if include_points:
+                # iterate over each stimulus
+                for idx, stimulus in enumerate(unique_stimuli):
+                    # plot all samples for a given stimulus
+                    sample_idx = stimuli == stimulus
+                    ax.scatter(
+                        stimulus * np.ones(sample_idx.sum()),
+                        X[sample_idx][:, unit_idx],
+                        color='gray',
+                        s=20,
+                        alpha=0.5)
+            # plot tuning curve
+            ax.plot(unique_stimuli, tuning_curves[unit_idx],
+                    color='black', linewidth=3, marker='o')
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xlim([unique_stimuli[0], unique_stimuli[-1]])
+    return fig, axes
 
 
 def plot_ellipses(mu0, cov0, mu1, cov1, ld_cov=None, faxes=None, alpha=.5):
