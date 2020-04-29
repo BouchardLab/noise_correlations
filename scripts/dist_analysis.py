@@ -1,3 +1,6 @@
+"""Performs a comparison of discriminability metrics on neural data across
+randomly chosen sub-populations of different sizes between a shuffle and
+rotation null model."""
 import argparse
 import h5py
 import neuropacks as packs
@@ -14,11 +17,13 @@ def main(args):
     data_path = args.data_path
     save_folder = args.save_folder
     dataset = args.dataset
-    n_dim = args.n_dim
+    dim_max = args.dim_max
+    dims = np.arange(2, dim_max + 1)
+    n_dims = dims.size
     n_dimlets = args.n_dimlets
     n_repeats = args.n_repeats
     rng = np.random.RandomState(args.random_state)
-    limit_stim = args.limit_stim
+    all_stim = args.limit_stim
 
     comm = MPI.COMM_WORLD
     size = comm.size
@@ -26,9 +31,11 @@ def main(args):
 
     if rank == 0:
         print(size, rank)
-        print(dataset, n_dim)
+        print(dataset, dim_max)
 
+    # obtain neural design matrix and broadcast to all ranks
     X = None
+    # Kohn lab data (Monkey V1, single-units, drifting gratings)
     if dataset == 'pvc11':
         circular_stim = True
         if rank == 0:
@@ -37,7 +44,17 @@ def main(args):
             X = pvc11.get_response_matrix(transform=None)
             stimuli = pvc11.get_design_matrix(form='angle')
             # TODO: keep criteria
-    elif dataset == 'maxd':
+    # Feller lab data (Mouse RGCs, single-units, drifting gratings)
+    elif dataset == 'ret2':
+        circular_stim = True
+        if rank == 0:
+            ret2 = packs.RET2(data_path=data_path)
+            # get design matrix and stimuli
+            X = ret2.get_response_matrix(cells='all', response='max')
+            stimuli = ret2.get_design_matrix(form='angle')
+            # TODO: keep criteria
+    # Bouchard lab data (Rat AC, muECOG, tone pips)
+    elif dataset == 'ac_ecog':
         circular_stim = False
         if rank == 0:
             with h5py.File(data_path, 'r') as f:
@@ -50,18 +67,35 @@ def main(args):
         raise ValueError('Dataset not available.')
 
     if rank == 0:
-        print(dataset, n_dim, 'load')
+        print(dataset, dim_max, 'load')
     X = Bcast_from_root(X, comm)
     if rank == 0:
-        print(dataset, n_dim, 'bcast')
+        print(dataset, dim_max, 'bcast')
 
-    # evaluate p-values using MPI
-    (p_s_lfi, p_s_sdkl,
-     p_r_lfi, p_r_sdkl,
-     v_lfi, v_sdkl) = dist_compare_nulls_measures(
-        X=X, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets, rng=rng,
-        comm=comm, n_repeats=n_repeats, circular_stim=circular_stim,
-        all_stim=limit_stim)
+    # determine size of p-value array
+    if all_stim and circular_stim:
+        n_dimlet_stim_combs = n_dimlets * np.unique(stimuli).size
+    elif all_stim and not circular_stim:
+        n_dimlet_stim_combs = n_dimlets * (np.unique(stimuli).size - 1)
+    else:
+        n_dimlet_stim_combs = n_dimlets
+
+    p_s_lfi = np.zeros((n_dims, n_dimlet_stim_combs))
+    p_s_sdkl = np.zeros((n_dims, n_dimlet_stim_combs))
+    p_r_lfi = np.zeros((n_dims, n_dimlet_stim_combs))
+    p_r_sdkl = np.zeros((n_dims, n_dimlet_stim_combs))
+    v_lfi = np.zeros((n_dims, n_dimlet_stim_combs))
+    v_sdkl = np.zeros((n_dims, n_dimlet_stim_combs))
+
+    # calculate p-values for many dimlets at difference dimensions
+    for idx, n_dim in enumerate(n_dims):
+        # evaluate p-values using MPI
+        (p_s_lfi[idx], p_s_sdkl[idx],
+         p_r_lfi[idx], p_r_sdkl[idx],
+         v_lfi[idx], v_sdkl[idx]) = dist_compare_nulls_measures(
+            X=X, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets, rng=rng,
+            comm=comm, n_repeats=n_repeats, circular_stim=circular_stim,
+            all_stim=all_stim)
 
     if rank == 0:
         print(dataset, n_dim, 'presave')
@@ -82,8 +116,8 @@ if __name__ == '__main__':
                         help='Folder where results will be saved.')
     parser.add_argument('dataset', choices=['pvc11', 'maxd'],
                         help='Which dataset to run analysis on.')
-    parser.add_argument('n_dim', type=int,
-                        help='How many units to operate on.')
+    parser.add_argument('dim_max', type=int,
+                        help='The maximum number of units to operate on.')
     parser.add_argument('--n_dimlets', '-n', type=int, default=1000,
                         help='How many dimlets to consider.')
     parser.add_argument('--n_repeats', '-s', type=int, default=10000,
