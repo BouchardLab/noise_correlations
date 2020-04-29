@@ -152,6 +152,7 @@ def generate_dimlets_and_stim_pairs(
         stims = np.stack([unique_stimuli[stim_idx],
                           unique_stimuli[(stim_idx + 1) % n_stimuli]],
                          axis=1)
+        stims = np.sort(stims, axis=1)
 
         # check if number of dimlets is greater than maximum possible
         if n_dimlets >= max_dimlets:
