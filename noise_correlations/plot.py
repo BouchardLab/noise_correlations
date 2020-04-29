@@ -69,20 +69,43 @@ def scatter_blanche_ps(Yp, n_boot, ps=None, faxes=None):
     return ps, faxes
 
 
-def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None, cs=None,
-                           heatmap=False, insetfontsize=8):
+def plot_pvalue_comparison(p0s, p1s, labels=None, fax=None, ax_lim=None, pval=0.05,
+                           cs=None, heatmap=False, show_inset=True, insetfontsize=8):
     """Plots the p-value comparison between two null models.
 
     Parameters
     ----------
     p0s, p1s : ndarray, (configurations,)
-        The p-values across dimlet and stimulus-pair configurations.
-
+        The p-values across dimlet and stimulus-pair configurations. The former
+        will be on the x-axis, while the latter is on the y-axis.
+    labels : list of strings
+        The labels for the x- and y-axes, respectively.
+    fax : tuple of mpl.figure and mpl.axes, or None
+        The figure and axes. If None, a new set will be created.
+    ax_lim : float, default None
+        The left (x-axis) and bottom (y-axis) limit for the axes. If None, the
+        minimum p-value among all points will be used.
+    pval : float, default 0.05
+        The significance value to base plot regions on.
     cs : string, list of strings, or None
         Denotes which colors to use. If string, will use a pre-defined colormap.
         If list of strings, must contain 3 hex color codes, denoting the
         [top left region, bottom right region, bottom left region].
+    heatmap : bool
+        If True, uses a hexbin to show distribution of p-values. If False,
+        a scatter plot is used.
+    show_inset : bool
+        If True, inset showing distribution of points in regions is depicted.
+    insentfontsize : float
+        The font size for the inset showing distribution of points.
+
+    Returns
+    -------
+    fig, ax : mpl.figure and mpl.axes
+        The matplotlib axes objects, with p-values plotted.
     """
+    fig, ax = utils.check_fax(fax, n_rows=1, n_cols=1, figsize=(5, 5))
+
     # handle colors
     if cs is None:
         cs = [u'#9467bd', u'#8c564b', u'#17becf']
@@ -91,65 +114,77 @@ def plot_pvalue_comparison(p0s, p1s, labels, faxes=None, m=None, cs=None,
     elif not isinstance(cs, list):
         raise ValueError('Improper color key.')
 
-    if faxes is None:
-        faxes = plt.subplots(1, figsize=(5, 5))
-    f, ax = faxes
-
-    pos = ax.get_position()
     p0s[p0s == 0] = p0s[p0s > 0].min()
     p1s[p1s == 0] = p1s[p1s > 0].min()
+    # plot the p-values according to hexbin or scatter plot
     if heatmap:
         ax.hexbin(p0s, p1s, cmap='gray_r', mincnt=1, xscale='log', yscale='log',
                   extent=[-4, 1, -4, 1], gridsize=40, bins='log')
     else:
         ax.scatter(p0s, p1s, marker='.', c='k')
-    if m is None:
-        m = np.power(10., np.floor(np.log10(min(p0s.min(), p1s.min()))))
-    ax.plot([m, 1], [m, 1], c='k')
-    ax.axhline(.05, m, 1, c='k', ls='--')
-    ax.axvline(.05, m, 1, c='k', ls='--')
-    ax.set_xlim(m, 1)
-    ax.set_ylim(m, 1)
-    ax.add_artist(Rectangle((m, .05), .05-min(.05, m), 1-min(.05, m),
-                            facecolor=cs[0], alpha=.3))
-    ax.add_artist(Rectangle((.05, m), 1-min(.05, m), .05-min(.05, m),
-                            facecolor=cs[1], alpha=.3))
-    ax.add_artist(Rectangle((m, m), .05-min(.05, m), .05-min(.05, m),
-                            facecolor=cs[2], alpha=.3))
-    ax.set_yscale('log')
+    # choose axis bound if not provided
+    if ax_lim is None:
+        ax_lim = np.power(10., np.floor(np.log10(min(p0s.min(), p1s.min()))))
+    # identity line
+    ax.plot([ax_lim, 1], [ax_lim, 1], c='k')
+    # significance at chosen p-value lines
+    ax.axhline(pval, ax_lim, 1, c='k', ls='--')
+    ax.axvline(pval, ax_lim, 1, c='k', ls='--')
+    # stylize axes
+    ax.set_xlim(ax_lim, 1)
+    ax.set_ylim(ax_lim, 1)
     ax.set_xscale('log')
-    ax.set_xlabel(labels[0])
-    ax.set_ylabel(labels[1])
-    w = pos.x1 - pos.x0
-    h = pos.y1 - pos.y0
-    edge = .175
-    size = .35
-    ax1 = f.add_axes([pos.x0 + edge * w, pos.y0 + edge * h / 2., size * w, size * h])
-    total = p0s.size
-    ax1.set_xlabel('Total: {}'.format(total), fontsize=insetfontsize)
-    p0_not_1 = (np.logical_and(p0s < .05, p1s >= .05)).sum() / total
-    p1_not_0 = (np.logical_and(p1s < .05, p0s >= .05)).sum() / total
-    p0_and_1 = (np.logical_and(p1s < .05, p0s < .05)).sum() / total
-    ax1.bar([0, 1, 2], [p0_not_1, p1_not_0, p0_and_1], color=cs, alpha=.3)
-    n = max(max(p0_not_1, p1_not_0), p0_and_1)
-    ax1.set_yticks([])
-    ax1.set_xticks([])
-    ax1.set_xticklabels(['$\in$Purp.', '$\in$Br.'])
-    ax1.set_xticklabels(['', ''])
-    ax1.set_ylabel('Frac.', fontsize=insetfontsize)
-    p0_not_1 = np.around(p0_not_1, 2)
-    dec = int(p0_not_1 * 10)
-    hun = int(np.around(p0_not_1 * 100 - 10 * dec))
-    ax1.text(0, n, '.{}{}'.format(dec, hun), va='top', ha='center', fontsize=insetfontsize)
-    p1_not_0 = np.around(p1_not_0, 2)
-    dec = int(p1_not_0 * 10)
-    hun = int(np.around(p1_not_0 * 100 - 10 * dec))
-    ax1.text(1, n, '.{}{}'.format(dec, hun), va='top', ha='center', fontsize=insetfontsize)
-    p0_and_1 = np.around(p0_and_1, 2)
-    dec = int(p0_and_1 * 10)
-    hun = int(np.around(p0_and_1 * 100 - 10 * dec))
-    ax1.text(2, n, '.{}{}'.format(dec, hun), va='top', ha='center', fontsize=insetfontsize)
-    return faxes
+    ax.set_yscale('log')
+    if labels is not None:
+        ax.set_xlabel(labels[0])
+        ax.set_ylabel(labels[1])
+
+    # add colored rectangles denoting separate regions
+    ax.add_artist(Rectangle((ax_lim, pval), pval - min(pval, ax_lim), 1 - min(pval, ax_lim),
+                            facecolor=cs[0], alpha=.3))
+    ax.add_artist(Rectangle((pval, ax_lim), 1 - min(pval, ax_lim), pval - min(pval, ax_lim),
+                            facecolor=cs[1], alpha=.3))
+    ax.add_artist(Rectangle((ax_lim, ax_lim), pval - min(pval, ax_lim), pval - min(pval, ax_lim),
+                            facecolor=cs[2], alpha=.3))
+
+    # show inset with bar plot showing proportions of points in regions
+    if show_inset:
+        pos = ax.get_position()
+        # width and height of inset
+        w = pos.x1 - pos.x0
+        h = pos.y1 - pos.y0
+        edge = .175
+        size = .35
+        # add inset axes
+        inset = fig.add_axes([pos.x0 + edge * w, pos.y0 + edge * h / 2.,
+                              size * w, size * h])
+        # calculate fraction in each region
+        total = p0s.size
+        p0_not_1 = (np.logical_and(p0s < .05, p1s >= .05)).sum() / total
+        p1_not_0 = (np.logical_and(p1s < .05, p0s >= .05)).sum() / total
+        p0_and_1 = (np.logical_and(p1s < .05, p0s < .05)).sum() / total
+        max_proportion = 1.05 * max(p0_not_1, p1_not_0, p0_and_1)
+        # bar plot depicting these proportions
+        inset.bar([0, 1, 2], [p0_not_1, p1_not_0, p0_and_1], color=cs, alpha=.3)
+        # stylize inset axes
+        inset.set_yticks([])
+        inset.set_xticks([])
+        inset.set_xticklabels(['', ''])
+        inset.set_xlabel('Total: {}'.format(total), fontsize=insetfontsize)
+        inset.set_ylabel('Fraction', fontsize=insetfontsize)
+        inset.set_ylim([0, 1.10 * max_proportion])
+        # insert text indiciating proportions above each bar
+        inset.text(0, 1.075 * max_proportion, s='%.2f' % p0_not_1,
+                   va='top', ha='center',
+                   fontsize=insetfontsize)
+        inset.text(1, 1.075 * max_proportion, s='%.2f' % p1_not_0,
+                   va='top', ha='center',
+                   fontsize=insetfontsize)
+        inset.text(2, 1.075 * max_proportion, s='%.2f' % p0_and_1,
+                   va='top', ha='center',
+                   fontsize=insetfontsize)
+
+    return fig, ax
 
 
 def plot_tuning_curves(X, stimuli, n_cols=5, fax=None, include_points=False):

@@ -36,7 +36,6 @@ def check_fax(fax=None, n_rows=1, n_cols=1, figsize=(10, 10)):
     ----------
     fax : tuple of mpl.figure and mpl.axes, or None
         The figure and axes. If None, a new set will be created.
-
     figsize : tuple or None
         The figure size, if fax is None.
 

@@ -287,11 +287,11 @@ def compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, n_repeats=10000,
 
     Returns
     -------
-    p_s_lfi, p_s_sdkl : ndarray (reps,)
+    p_s_lfi, p_s_sdkl : ndarray (dimlets,)
         The p-values on the shuffled dimlets.
-    p_r_lfi, p_r_sdkl : ndarray (reps,)
+    p_r_lfi, p_r_sdkl : ndarray (dimlets,)
         The p-values on the rotated dimlets.
-    v_lfi, v_sdkl : float
+    v_lfi, v_sdkl : ndarray (dimlets,)
         The values of the LFI/sDKL on the original dimlet.
     """
     n_samples, n_units = X.shape
@@ -352,6 +352,15 @@ def dist_compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, comm,
         Indicates whether the stimulus is circular.
     all_stim : bool
         If True, all consecutive pairs of stimuli are used.
+
+    Returns
+    -------
+    p_s_lfi, p_s_sdkl : ndarray (dimlets,)
+        The p-values on the shuffled dimlets.
+    p_r_lfi, p_r_sdkl : ndarray (dimlets,)
+        The p-values on the rotated dimlets.
+    v_lfi, v_sdkl : ndarray (dimlets,)
+        The values of the LFI/sDKL on the original dimlet.
     """
     from mpi_utils.ndarray import Gatherv_rows
 
