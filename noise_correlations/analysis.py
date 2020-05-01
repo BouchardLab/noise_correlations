@@ -369,7 +369,10 @@ def dist_compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, comm,
     size = comm.size
     rank = comm.rank
 
-    units, stims = generate_dimlets_and_stim_pairs()
+    units, stims = generate_dimlets_and_stim_pairs(
+        n_units=n_units, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets,
+        rng=rng, all_stim=all_stim, circular_stim=circular_stim
+    )
     # allocate units and stims to the current rank
     units = np.array_split(units, size)[rank]
     stims = np.array_split(stims, size)[rank]
@@ -385,7 +388,7 @@ def dist_compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, comm,
 
     for ii in range(my_dimlets):
         if rank == 0:
-            print(n_dim, '{} out of {}'.format(ii + 1, my_dimlets))
+            print('Dimension %s' % n_dim, '{} out of {}'.format(ii + 1, my_dimlets))
         unit_idxs, stim_vals = units[ii], stims[ii]
         # calculate values under shuffle and rotation null models
         (v_s_lfi, v_s_sdkl,

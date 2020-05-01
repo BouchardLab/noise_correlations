@@ -10,31 +10,41 @@ import os
 from mpi4py import MPI
 from mpi_utils.ndarray import Bcast_from_root
 from noise_correlations.analysis import dist_compare_nulls_measures
+from noise_correlations import utils
 
 
 def main(args):
     # process command line arguments
+    # filepath arguments
     data_path = args.data_path
     save_folder = args.save_folder
     dataset = args.dataset
+    # the dimensions we consider
     dim_max = args.dim_max
     dims = np.arange(2, dim_max + 1)
-    n_dims = dims.size
+    n_unique_dims = dims.size
+    # number of dimlets per dimension
     n_dimlets = args.n_dimlets
+    # number of repeats for each dimlet/stim pairing
     n_repeats = args.n_repeats
-    rng = np.random.RandomState(args.random_state)
+    # identify which type of neural population we consider
+    which_neurons = args.which_neurons
     all_stim = args.limit_stim
+
+    # create random state
+    rng = np.random.RandomState(args.random_state)
 
     comm = MPI.COMM_WORLD
     size = comm.size
     rank = comm.rank
 
     if rank == 0:
-        print(size, rank)
-        print(dataset, dim_max)
+        print('%s processes running, this is rank %s' % (size, rank))
+        print('Running on dataset %s, up to %s dimensions' % (dataset, dim_max))
 
     # obtain neural design matrix and broadcast to all ranks
     X = None
+    stimuli = None
     # Kohn lab data (Monkey V1, single-units, drifting gratings)
     if dataset == 'pvc11':
         circular_stim = True
@@ -43,7 +53,11 @@ def main(args):
             # get design matrix and stimuli
             X = pvc11.get_response_matrix(transform=None)
             stimuli = pvc11.get_design_matrix(form='angle')
-            # TODO: keep criteria
+            if which_neurons == 'tuned':
+                tuned_units = utils.get_tuned_units(X, stimuli,
+                                                    peak_response=args.peak_response,
+                                                    min_modulation=args.min_modulation)
+                X = X[:, tuned_units]
     # Feller lab data (Mouse RGCs, single-units, drifting gratings)
     elif dataset == 'ret2':
         circular_stim = True
@@ -52,7 +66,6 @@ def main(args):
             # get design matrix and stimuli
             X = ret2.get_response_matrix(cells='all', response='max')
             stimuli = ret2.get_design_matrix(form='angle')
-            # TODO: keep criteria
     # Bouchard lab data (Rat AC, muECOG, tone pips)
     elif dataset == 'ac_ecog':
         circular_stim = False
@@ -67,10 +80,11 @@ def main(args):
         raise ValueError('Dataset not available.')
 
     if rank == 0:
-        print(dataset, dim_max, 'load')
+        print('Loaded dataset %s' % dataset)
     X = Bcast_from_root(X, comm)
+    stimuli = Bcast_from_root(stimuli, comm)
     if rank == 0:
-        print(dataset, dim_max, 'bcast')
+        print('Broadcasted dataset %s' % dataset)
 
     # determine size of p-value array
     if all_stim and circular_stim:
@@ -80,15 +94,17 @@ def main(args):
     else:
         n_dimlet_stim_combs = n_dimlets
 
-    p_s_lfi = np.zeros((n_dims, n_dimlet_stim_combs))
-    p_s_sdkl = np.zeros((n_dims, n_dimlet_stim_combs))
-    p_r_lfi = np.zeros((n_dims, n_dimlet_stim_combs))
-    p_r_sdkl = np.zeros((n_dims, n_dimlet_stim_combs))
-    v_lfi = np.zeros((n_dims, n_dimlet_stim_combs))
-    v_sdkl = np.zeros((n_dims, n_dimlet_stim_combs))
+    p_s_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+    p_s_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+    p_r_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+    p_r_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+    v_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+    v_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
 
     # calculate p-values for many dimlets at difference dimensions
-    for idx, n_dim in enumerate(n_dims):
+    for idx, n_dim in enumerate(dims):
+        if rank == 0:
+            print('=== Dimension %s ===' % n_dim)
         # evaluate p-values using MPI
         (p_s_lfi[idx], p_s_sdkl[idx],
          p_r_lfi[idx], p_r_sdkl[idx],
@@ -97,15 +113,16 @@ def main(args):
             comm=comm, n_repeats=n_repeats, circular_stim=circular_stim,
             all_stim=all_stim)
 
+    # save data in root
     if rank == 0:
-        print(dataset, n_dim, 'presave')
-        save_name = '{}_{}_{}_{}.npz'.format(dataset, n_dim, n_dimlets, n_repeats)
+        print('Pre-save.')
+        save_name = '{}_{}_{}_{}.npz'.format(dataset, dim_max, n_dimlets, n_repeats)
         save_name = os.path.join(save_folder, save_name)
         np.savez(save_name,
                  p_s_lfi=p_s_lfi, p_s_sdkl=p_s_sdkl,
                  p_r_lfi=p_r_lfi, p_r_sdkl=p_r_sdkl,
                  v_lfi=v_lfi, v_sdkl=v_sdkl)
-        print(dataset, n_dim, 'done')
+        print('Successfully Saved.')
 
 
 if __name__ == '__main__':
@@ -123,6 +140,10 @@ if __name__ == '__main__':
     parser.add_argument('--n_repeats', '-s', type=int, default=10000,
                         help='How many repetitions to perform when evaluating'
                              'p-values.')
+    parser.add_argument('--which_neurons', '-which', default='tuned',
+                        choices=['tuned', 'responsive', 'all'])
+    parser.add_argument('--peak_response', type=float, default=10.)
+    parser.add_argument('--min_modulation', type=float, default=2.)
     parser.add_argument('--random_state', '-rs', type=int, default=0,
                         help='Random state seed.')
     parser.add_argument('--limit_stim', action='store_false',
