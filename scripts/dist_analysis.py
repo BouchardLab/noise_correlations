@@ -6,6 +6,7 @@ import h5py
 import neuropacks as packs
 import numpy as np
 import os
+import time
 
 from mpi4py import MPI
 from mpi_utils.ndarray import Bcast_from_root
@@ -39,6 +40,7 @@ def main(args):
     rank = comm.rank
 
     if rank == 0:
+        t0 = time.time()
         print('%s processes running, this is rank %s' % (size, rank))
         print('Running on dataset %s, up to %s dimensions' % (dataset, dim_max))
 
@@ -104,6 +106,8 @@ def main(args):
     # calculate p-values for many dimlets at difference dimensions
     for idx, n_dim in enumerate(dims):
         if rank == 0:
+            t1 = time.time()
+            print('Time: ', t1 - t0)
             print('=== Dimension %s ===' % n_dim)
         # evaluate p-values using MPI
         (p_s_lfi[idx], p_s_sdkl[idx],
@@ -115,6 +119,8 @@ def main(args):
 
     # save data in root
     if rank == 0:
+        t2 = time.time()
+        print('Time: ', t2 - t0)
         print('Pre-save.')
         save_name = '{}_{}_{}_{}.npz'.format(dataset, dim_max, n_dimlets, n_repeats)
         save_name = os.path.join(save_folder, save_name)
