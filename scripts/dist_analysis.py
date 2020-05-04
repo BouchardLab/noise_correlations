@@ -41,8 +41,12 @@ def main(args):
 
     if rank == 0:
         t0 = time.time()
-        print('%s processes running, this is rank %s' % (size, rank))
-        print('Running on dataset %s, up to %s dimensions' % (dataset, dim_max))
+        print('--------------------------------------------------------------')
+        print('%s processes running, this is rank %s.' % (size, rank))
+        print('Running on dataset %s, up to %s dimensions.' % (dataset, dim_max))
+        print('Using %s dimlets per dimension, and %s repeats per dimlet.'
+              % (n_dimlets, n_repeats))
+        print('--------------------------------------------------------------')
 
     # obtain neural design matrix and broadcast to all ranks
     X = None
@@ -106,8 +110,6 @@ def main(args):
     # calculate p-values for many dimlets at difference dimensions
     for idx, n_dim in enumerate(dims):
         if rank == 0:
-            t1 = time.time()
-            print('Time: ', t1 - t0)
             print('=== Dimension %s ===' % n_dim)
         # evaluate p-values using MPI
         (p_s_lfi[idx], p_s_sdkl[idx],
@@ -116,11 +118,12 @@ def main(args):
             X=X, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets, rng=rng,
             comm=comm, n_repeats=n_repeats, circular_stim=circular_stim,
             all_stim=all_stim)
+        if rank == 0:
+            t1 = time.time()
+            print('Loop took %s seconds.\n' % (t1 - t0))
 
     # save data in root
     if rank == 0:
-        t2 = time.time()
-        print('Time: ', t2 - t0)
         print('Pre-save.')
         save_name = '{}_{}_{}_{}.npz'.format(dataset, dim_max, n_dimlets, n_repeats)
         save_name = os.path.join(save_folder, save_name)
@@ -129,6 +132,8 @@ def main(args):
                  p_r_lfi=p_r_lfi, p_r_sdkl=p_r_sdkl,
                  v_lfi=v_lfi, v_sdkl=v_sdkl)
         print('Successfully Saved.')
+        t2 = time.time()
+        print('Job complete. Total time: ', t2 - t0)
 
 
 if __name__ == '__main__':
