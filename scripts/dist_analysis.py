@@ -138,13 +138,13 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run noise correlations analysis.')
-    parser.add_argument('data_path', type=str,
+    parser.add_argument('--data_path', type=str,
                         help='Path to where the dataset is stored.')
-    parser.add_argument('save_folder', type=str,
+    parser.add_argument('--save_folder', type=str,
                         help='Folder where results will be saved.')
-    parser.add_argument('dataset', choices=['pvc11', 'maxd'],
+    parser.add_argument('--dataset', choices=['pvc11', 'maxd'],
                         help='Which dataset to run analysis on.')
-    parser.add_argument('dim_max', type=int,
+    parser.add_argument('--dim_max', type=int,
                         help='The maximum number of units to operate on.')
     parser.add_argument('--n_dimlets', '-n', type=int, default=1000,
                         help='How many dimlets to consider.')
