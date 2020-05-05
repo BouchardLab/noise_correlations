@@ -110,6 +110,7 @@ def main(args):
     # calculate p-values for many dimlets at difference dimensions
     for idx, n_dim in enumerate(dims):
         if rank == 0:
+            t1 = time.time()
             print('=== Dimension %s ===' % n_dim)
         # evaluate p-values using MPI
         (p_s_lfi[idx], p_s_sdkl[idx],
@@ -119,8 +120,7 @@ def main(args):
             comm=comm, n_repeats=n_repeats, circular_stim=circular_stim,
             all_stim=all_stim)
         if rank == 0:
-            t1 = time.time()
-            print('Loop took %s seconds.\n' % (t1 - t0))
+            print('Loop took %s seconds.\n' % (time.time() - t1))
 
     # save data in root
     if rank == 0:
