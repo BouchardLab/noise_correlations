@@ -19,6 +19,7 @@ def main(args):
     # filepath arguments
     data_path = args.data_path
     save_folder = args.save_folder
+    save_tag = args.save_tag
     dataset = args.dataset
     # the dimensions we consider
     dim_max = args.dim_max
@@ -126,6 +127,8 @@ def main(args):
     if rank == 0:
         print('Pre-save.')
         save_name = '{}_{}_{}_{}.npz'.format(dataset, dim_max, n_dimlets, n_repeats)
+        if save_tag != '':
+            save_name = save_tag + '_' + save_name
         save_name = os.path.join(save_folder, save_name)
         np.savez(save_name,
                  p_s_lfi=p_s_lfi, p_s_sdkl=p_s_sdkl,
@@ -142,6 +145,8 @@ if __name__ == '__main__':
                         help='Path to where the dataset is stored.')
     parser.add_argument('--save_folder', type=str,
                         help='Folder where results will be saved.')
+    parser.add_argument('--save_tag', type=str, default='',
+                        help='Tag to add onto the results folder.')
     parser.add_argument('--dataset', choices=['pvc11', 'maxd'],
                         help='Which dataset to run analysis on.')
     parser.add_argument('--dim_max', type=int,
