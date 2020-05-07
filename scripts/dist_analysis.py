@@ -6,6 +6,7 @@ import h5py
 import neuropacks as packs
 import numpy as np
 import os
+import time
 
 from mpi4py import MPI
 from mpi_utils.ndarray import Bcast_from_root
@@ -18,6 +19,7 @@ def main(args):
     # filepath arguments
     data_path = args.data_path
     save_folder = args.save_folder
+    save_tag = args.save_tag
     dataset = args.dataset
     # the dimensions we consider
     dim_max = args.dim_max
@@ -39,8 +41,13 @@ def main(args):
     rank = comm.rank
 
     if rank == 0:
-        print('%s processes running, this is rank %s' % (size, rank))
-        print('Running on dataset %s, up to %s dimensions' % (dataset, dim_max))
+        t0 = time.time()
+        print('--------------------------------------------------------------')
+        print('%s processes running, this is rank %s.' % (size, rank))
+        print('Running on dataset %s, up to %s dimensions.' % (dataset, dim_max))
+        print('Using %s dimlets per dimension, and %s repeats per dimlet.'
+              % (n_dimlets, n_repeats))
+        print('--------------------------------------------------------------')
 
     # obtain neural design matrix and broadcast to all ranks
     X = None
@@ -104,6 +111,7 @@ def main(args):
     # calculate p-values for many dimlets at difference dimensions
     for idx, n_dim in enumerate(dims):
         if rank == 0:
+            t1 = time.time()
             print('=== Dimension %s ===' % n_dim)
         # evaluate p-values using MPI
         (p_s_lfi[idx], p_s_sdkl[idx],
@@ -112,28 +120,36 @@ def main(args):
             X=X, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets, rng=rng,
             comm=comm, n_repeats=n_repeats, circular_stim=circular_stim,
             all_stim=all_stim)
+        if rank == 0:
+            print('Loop took %s seconds.\n' % (time.time() - t1))
 
     # save data in root
     if rank == 0:
         print('Pre-save.')
         save_name = '{}_{}_{}_{}.npz'.format(dataset, dim_max, n_dimlets, n_repeats)
+        if save_tag != '':
+            save_name = save_tag + '_' + save_name
         save_name = os.path.join(save_folder, save_name)
         np.savez(save_name,
                  p_s_lfi=p_s_lfi, p_s_sdkl=p_s_sdkl,
                  p_r_lfi=p_r_lfi, p_r_sdkl=p_r_sdkl,
                  v_lfi=v_lfi, v_sdkl=v_sdkl)
         print('Successfully Saved.')
+        t2 = time.time()
+        print('Job complete. Total time: ', t2 - t0)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run noise correlations analysis.')
-    parser.add_argument('data_path', type=str,
+    parser.add_argument('--data_path', type=str,
                         help='Path to where the dataset is stored.')
-    parser.add_argument('save_folder', type=str,
+    parser.add_argument('--save_folder', type=str,
                         help='Folder where results will be saved.')
-    parser.add_argument('dataset', choices=['pvc11', 'maxd'],
+    parser.add_argument('--save_tag', type=str, default='',
+                        help='Tag to add onto the results folder.')
+    parser.add_argument('--dataset', choices=['pvc11', 'maxd'],
                         help='Which dataset to run analysis on.')
-    parser.add_argument('dim_max', type=int,
+    parser.add_argument('--dim_max', type=int,
                         help='The maximum number of units to operate on.')
     parser.add_argument('--n_dimlets', '-n', type=int, default=1000,
                         help='How many dimlets to consider.')
