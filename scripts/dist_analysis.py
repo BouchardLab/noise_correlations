@@ -88,6 +88,7 @@ def main(args):
 
     if rank == 0:
         print('Loaded dataset %s' % dataset)
+        print('Dataset has %s units and %s samples.' % (X.shape[1], X.shape[0]))
     X = Bcast_from_root(X, comm)
     stimuli = Bcast_from_root(stimuli, comm)
     if rank == 0:
