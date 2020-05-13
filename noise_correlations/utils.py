@@ -249,6 +249,34 @@ def get_responsive_units(
     return keep
 
 
+def p_value_regions(p0, p1, alpha=0.01):
+    """Returns the fraction of p-values in different regions.
+
+    Parameters
+    ----------
+    p0, p1 : np.ndarray
+        The p-values.
+
+    Returns
+    -------
+    f_both : float
+        The fraction of p-values that are significant in both cases.
+    f0_only, f1_only : float
+        The fraction of p-values that are significant for one set, but not the
+        other.
+    """
+    n_samples = p0.size
+    sig0 = p0 < alpha
+    sig1 = p1 < alpha
+
+    # calculate fractions in each region
+    f_both = np.sum(sig0 & sig1) / n_samples
+    f0_only = np.sum(sig0 & ~sig1) / n_samples
+    f1_only = np.sum(~sig0 & sig1) / n_samples
+
+    return f0_only, f1_only, f_both
+
+
 def uniform_correlation_matrix(dim, var, corr, noise_std=0., rng=None):
     """Create a uniform covariance matrix with constant variance and uniform
     pairwise covariance. Will have a single e0 eigenvalue and dim-1 e1

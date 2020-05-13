@@ -69,8 +69,10 @@ def scatter_blanche_ps(Yp, n_boot, ps=None, faxes=None):
     return ps, faxes
 
 
-def plot_pvalue_comparison(p0s, p1s, labels=None, fax=None, ax_lim=None, pval=0.05,
-                           cs=None, heatmap=False, show_inset=True, insetfontsize=8):
+def plot_pvalue_comparison(
+    p0s, p1s, labels=None, fax=None, ax_lim=None, pval=0.05, cs=None,
+    heatmap=False, show_inset=True, color_regions=True, insetfontsize=8
+):
     """Plots the p-value comparison between two null models.
 
     Parameters
@@ -96,6 +98,8 @@ def plot_pvalue_comparison(p0s, p1s, labels=None, fax=None, ax_lim=None, pval=0.
         a scatter plot is used.
     show_inset : bool
         If True, inset showing distribution of points in regions is depicted.
+    color_regions : bool
+        If True, colors specific regions of the p-value plot.
     insentfontsize : float
         The font size for the inset showing distribution of points.
 
@@ -140,12 +144,19 @@ def plot_pvalue_comparison(p0s, p1s, labels=None, fax=None, ax_lim=None, pval=0.
         ax.set_ylabel(labels[1])
 
     # add colored rectangles denoting separate regions
-    ax.add_artist(Rectangle((ax_lim, pval), pval - min(pval, ax_lim), 1 - min(pval, ax_lim),
-                            facecolor=cs[0], alpha=.3))
-    ax.add_artist(Rectangle((pval, ax_lim), 1 - min(pval, ax_lim), pval - min(pval, ax_lim),
-                            facecolor=cs[1], alpha=.3))
-    ax.add_artist(Rectangle((ax_lim, ax_lim), pval - min(pval, ax_lim), pval - min(pval, ax_lim),
-                            facecolor=cs[2], alpha=.3))
+    if color_regions:
+        ax.add_artist(Rectangle((ax_lim, pval),
+                                pval - min(pval, ax_lim),
+                                1 - min(pval, ax_lim),
+                                facecolor=cs[0], alpha=.3))
+        ax.add_artist(Rectangle((pval, ax_lim),
+                                1 - min(pval, ax_lim),
+                                pval - min(pval, ax_lim),
+                                facecolor=cs[1], alpha=.3))
+        ax.add_artist(Rectangle((ax_lim, ax_lim),
+                                pval - min(pval, ax_lim),
+                                pval - min(pval, ax_lim),
+                                facecolor=cs[2], alpha=.3))
 
     # show inset with bar plot showing proportions of points in regions
     if show_inset:
@@ -385,6 +396,7 @@ def rot_plot_data(x0, x1, measure, nsamples=10000):
     print('Value: ', val)
     print('Fraction of rotations giving smaller values: ', frac)
     return val, frac, ax
+
 
 def median_ps(ps, dim, fax=None, label=None, dx=0., c='C0'):
     if fax is None:
