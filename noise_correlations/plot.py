@@ -233,10 +233,10 @@ def plot_tuning_curves(
 
     # sort units by peak response
     if sort == 'peak':
-        peak_responses = utils.get_peak_responses(X, stimuli)
+        peak_responses = utils.get_peak_response(X, stimuli)
         sorted_units = np.argsort(peak_responses)
     elif sort == 'modulation':
-        modulations = utils.get_tuning_modulations(X, stimuli)
+        modulations = utils.get_tuning_modulation(X, stimuli)
         sorted_units = np.argsort(modulations)
     elif sort is None:
         sorted_units = np.arange(n_units)

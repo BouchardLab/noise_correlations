@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.stats as ss
 
 
 def X_stimuli(X, stimuli):
@@ -101,7 +102,7 @@ def get_variance_to_mean_ratio(X, stimuli):
     return np.nan_to_num(variance_to_mean).mean(axis=1)
 
 
-def get_tuning_curve(X, stimuli, aggregator=np.median):
+def get_tuning_curve(X, stimuli, aggregator=np.mean):
     """Gets the tuning curves for a neural design matrix and set of stimuli.
 
     Parameters
@@ -127,7 +128,7 @@ def get_tuning_curve(X, stimuli, aggregator=np.median):
     return tuning_curves
 
 
-def get_tuning_modulations(X, stimuli, aggregator=np.mean):
+def get_tuning_modulation(X, stimuli, aggregator=np.mean):
     """Gets the tuning modulation (min-to-max distance) for each unit in a
     neural design matrix and set of stimuli.
 
@@ -150,7 +151,107 @@ def get_tuning_modulations(X, stimuli, aggregator=np.mean):
     return modulations
 
 
-def get_peak_responses(X, stimuli, aggregator=np.median):
+def get_tuning_modulation_fraction(X, stimuli, aggregator=np.mean):
+    """Gets the tuning modulation fraction (modulation to peak ratio) for each
+    unit in a neural design matrix and set of stimuli.
+
+    Parameters
+    ----------
+    X : ndarray (samples, units)
+        Neural data design matrix.
+    stimuli : ndarray (samples,)
+        The stimulus value for each trial.
+    aggregator : function
+        Function used to aggregate statistics across samples per stimulus.
+
+    Returns
+    -------
+    modulations : ndarray (units,)
+        The min-to-max distance of each neuron's tuning curve.
+    """
+    tuning_curves = get_tuning_curve(X, stimuli, aggregator)
+    modulations = np.max(tuning_curves, axis=1) - np.min(tuning_curves, axis=1)
+    modulation_fractions = modulations / np.max(tuning_curves, axis=1)
+    return modulation_fractions
+
+
+def get_tuning_modulation_pvalue(X, stimuli, aggregator=np.mean):
+    """Performs a Wilcoxon rank-sum test on the distribution of the max and
+    min points of the tuning curve, and returns the p-value.
+
+    Parameters
+    ----------
+    X : ndarray (samples, units)
+        Neural data design matrix.
+    stimuli : ndarray (samples,)
+        The stimulus value for each trial.
+    aggregator : function
+        Function used to aggregate statistics across samples per stimulus.
+
+    Returns
+    -------
+    pvalues : ndarray (units,)
+        The p-values comparing the min-to-max distribution of the tuning curve.
+    """
+    n_samples, n_units, n_stimuli, unique_stimuli = X_stimuli(X, stimuli)
+    # calculate tuning curves
+    tuning_curves = get_tuning_curve(X, stimuli, aggregator)
+    # get best and worst stimuli index for each unit
+    max_idxs = np.argmax(tuning_curves, axis=1)
+    min_idxs = np.argmin(tuning_curves, axis=1)
+
+    # calculate p-value for each unit
+    pvalues = np.zeros(n_units)
+    for unit in range(n_units):
+        # get best/worst stim for unit
+        max_stim = unique_stimuli[max_idxs[unit]]
+        min_stim = unique_stimuli[min_idxs[unit]]
+        # get max/min response distribution for unit
+        max_responses = X[stimuli == max_stim][:, unit]
+        min_responses = X[stimuli == min_stim][:, unit]
+        # calculate p-value for each unit
+        _, pvalues[unit] = ss.ttest_ind(max_responses, min_responses, equal_var=False)
+
+    return pvalues
+
+
+def get_selectivity_index(X, stimuli, aggregator=np.mean, circular=360):
+    """Gets the orientation/direction selectivity index for a set of neural
+    responses and circular stimuli.
+
+    Parameters
+    ----------
+    X : ndarray (samples, units)
+        Neural data design matrix.
+    stimuli : ndarray (samples,)
+        The stimulus value for each trial.
+    aggregator : function
+        Function used to aggregate statistics across samples per stimulus.
+    circular : float
+        The circular bound of the stimulus set.
+
+    Returns
+    -------
+    si : ndarray (units,)
+        The selectivity index.
+    """
+    unique_stimuli = np.unique(stimuli)
+    # calculate difference between preferred / orthogonal stimuli
+    stim_difference = circular / 2
+    # get preferred tuning
+    tuning_curves = get_tuning_curve(X, stimuli, aggregator)
+    preferred_stimuli = unique_stimuli[np.argmax(tuning_curves, 1)]
+    # calculate orthogonal direction
+    orthogonal_direction = (preferred_stimuli + stim_difference) % 360
+    orthogonal_idx = np.searchsorted(unique_stimuli, orthogonal_direction)
+    # calculate selectivity index
+    r_max = np.max(tuning_curves, axis=1)
+    r_orth = tuning_curves[np.arange(X.shape[1]), orthogonal_idx]
+    si = (r_max - r_orth) / (r_max + r_orth)
+    return si
+
+
+def get_peak_response(X, stimuli, aggregator=np.mean):
     """Gets the tuning modulation (min-to-max distance) for each unit in a
     neural design matrix and set of stimuli.
 
@@ -174,8 +275,8 @@ def get_peak_responses(X, stimuli, aggregator=np.median):
 
 
 def get_tuned_units(
-    X, stimuli, aggregator=np.median, peak_response=2, modulation_frac=None,
-    variance_to_mean=10
+    X, stimuli, aggregator=np.mean, peak_response=2, tuning_criteria='p-value',
+    alpha=0.05, modulation=4, modulation_frac=None, variance_to_mean=10
 ):
     """Gets the units in a neural design matrix which satisfy a chosen
     criteria for being tuned.
@@ -206,19 +307,30 @@ def get_tuned_units(
     n_units = X.shape[1]
     keep = np.ones(n_units)
     # peak of each tuning curve must be some minimum value
-    peak_responses = get_peak_responses(X, stimuli, aggregator=aggregator)
+    peak_responses = get_peak_response(X, stimuli, aggregator=aggregator)
     valid = peak_responses > peak_response
     keep = np.logical_and(keep, valid)
     # the min-to-max distance must be at least some minimum value
-    if modulation_frac is not None:
-        tuning_modulations = get_tuning_modulations(X, stimuli, aggregator=aggregator)
+    if tuning_criteria == 'p-value':
+        pvalues = get_tuning_modulation_pvalue(X, stimuli, aggregator)
+        valid = pvalues < alpha
+    elif tuning_criteria == 'modulation':
+        tuning_modulations = get_tuning_modulation(X, stimuli, aggregator=aggregator)
+        valid = tuning_modulations > modulation
+    elif tuning_criteria == 'modulation_frac':
+        tuning_modulations = get_tuning_modulation(X, stimuli, aggregator=aggregator)
         valid = (tuning_modulations / peak_responses) > modulation_frac
-        keep = np.logical_and(keep, valid)
+    elif tuning_criteria is None:
+        return keep
+    else:
+        raise ValueError('Invalid tuning criteria.')
+    keep = np.logical_and(keep, valid)
+
     return keep
 
 
 def get_responsive_units(
-    X, stimuli, aggregator=np.median, peak_response=None, variance_to_mean=10.
+    X, stimuli, aggregator=np.mean, peak_response=None, variance_to_mean=10.
 ):
     """Gets the units in a neural design matrix which exhibit enough neural
     activity to be considered responsive. Acts as a wrapper for the
@@ -244,7 +356,7 @@ def get_responsive_units(
         A Boolean mask denoting which neurons to keep.
     """
     keep = get_tuned_units(X=X, stimuli=stimuli, aggregator=aggregator,
-                           peak_response=peak_response, modulation_frac=None,
+                           peak_response=peak_response, tuning_criteria=None,
                            variance_to_mean=variance_to_mean)
     return keep
 
