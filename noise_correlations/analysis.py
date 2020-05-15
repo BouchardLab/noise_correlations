@@ -5,13 +5,13 @@ from scipy.stats import special_ortho_group as sog
 from itertools import combinations
 
 from .null_models import shuffle_data, random_rotation
-from .utils import mean_cov, uniform_correlation_matrix
+from .utils import mean_cov, uniform_correlation_matrix, X_stimuli
 from .discriminability import (lfi, lfi_data,
                                mv_normal_jeffreys as sdkl,
                                mv_normal_jeffreys_data as sdkl_data)
 
 
-def all_correlations(X, stimuli, spearmanr=False):
+def all_correlations(X, stimuli, u1=None, u2=None, spearmanr=False):
     """Compute all pairwise correlations.
 
     Parameters
@@ -20,6 +20,9 @@ def all_correlations(X, stimuli, spearmanr=False):
         Neural data design matrix.
     stimuli : ndarray (samples,)
         The stimulus value for each trial.
+    u1, u2 : ndarray (units,)
+        The sub-population to consider correlations between. If None, all
+        correlations are stored.
 
     Returns
     -------
@@ -27,7 +30,29 @@ def all_correlations(X, stimuli, spearmanr=False):
         All pairwise correlations across stimuli.
     """
     corrs = []
-    unique_stimuli = np.unique(stimuli)
+    n_samples, n_units, n_stimuli, unique_stimuli = X_stimuli(X, stimuli)
+
+    # no sub-populations provided, examine all correlations
+    if u1 is None and u2 is None:
+        idxs = np.triu_indices(n=n_units, k=1)
+    # examine within sub-population correlation specified by u1
+    elif u1 is not None and u2 is None:
+        if u1.dtype == 'bool':
+            u1 = np.argwhere(u1).ravel()
+        idxs = np.array([[idx1, idx2]
+                         for idx1 in u1 for idx2 in u1
+                         if idx2 < idx1])
+        idxs = (idxs[:, 0], idxs[:, 1])
+    # examine between sub-population correlation specified by u1/u2
+    elif u1 is not None and u2 is not None:
+        if u1.dtype == 'bool':
+            u1 = np.argwhere(u1).ravel()
+        if u2.dtype == 'bool':
+            u2 = np.argwhere(u2).ravel()
+        idxs = np.array([[idx1, idx2]
+                         for idx1 in u1 for idx2 in u2])
+        idxs = (idxs[:, 0], idxs[:, 1])
+
     # get correlations across trials for unique stimuli
     for stim in unique_stimuli:
         # get responses corresponding to the current stimulus
@@ -36,7 +61,6 @@ def all_correlations(X, stimuli, spearmanr=False):
             cc = sr(X_stim, axis=1)[0]
         else:
             cc = np.corrcoef(X_stim)
-        idxs = np.triu_indices_from(cc, k=1)
         cc = cc[idxs]
         corrs.append(cc)
     corrs = np.concatenate(corrs)

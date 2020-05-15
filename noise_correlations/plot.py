@@ -69,8 +69,10 @@ def scatter_blanche_ps(Yp, n_boot, ps=None, faxes=None):
     return ps, faxes
 
 
-def plot_pvalue_comparison(p0s, p1s, labels=None, fax=None, ax_lim=None, pval=0.05,
-                           cs=None, heatmap=False, show_inset=True, insetfontsize=8):
+def plot_pvalue_comparison(
+    p0s, p1s, labels=None, fax=None, ax_lim=None, pval=0.05, cs=None,
+    heatmap=False, show_inset=True, color_regions=True, insetfontsize=8
+):
     """Plots the p-value comparison between two null models.
 
     Parameters
@@ -96,6 +98,8 @@ def plot_pvalue_comparison(p0s, p1s, labels=None, fax=None, ax_lim=None, pval=0.
         a scatter plot is used.
     show_inset : bool
         If True, inset showing distribution of points in regions is depicted.
+    color_regions : bool
+        If True, colors specific regions of the p-value plot.
     insentfontsize : float
         The font size for the inset showing distribution of points.
 
@@ -140,12 +144,19 @@ def plot_pvalue_comparison(p0s, p1s, labels=None, fax=None, ax_lim=None, pval=0.
         ax.set_ylabel(labels[1])
 
     # add colored rectangles denoting separate regions
-    ax.add_artist(Rectangle((ax_lim, pval), pval - min(pval, ax_lim), 1 - min(pval, ax_lim),
-                            facecolor=cs[0], alpha=.3))
-    ax.add_artist(Rectangle((pval, ax_lim), 1 - min(pval, ax_lim), pval - min(pval, ax_lim),
-                            facecolor=cs[1], alpha=.3))
-    ax.add_artist(Rectangle((ax_lim, ax_lim), pval - min(pval, ax_lim), pval - min(pval, ax_lim),
-                            facecolor=cs[2], alpha=.3))
+    if color_regions:
+        ax.add_artist(Rectangle((ax_lim, pval),
+                                pval - min(pval, ax_lim),
+                                1 - min(pval, ax_lim),
+                                facecolor=cs[0], alpha=.3))
+        ax.add_artist(Rectangle((pval, ax_lim),
+                                1 - min(pval, ax_lim),
+                                pval - min(pval, ax_lim),
+                                facecolor=cs[1], alpha=.3))
+        ax.add_artist(Rectangle((ax_lim, ax_lim),
+                                pval - min(pval, ax_lim),
+                                pval - min(pval, ax_lim),
+                                facecolor=cs[2], alpha=.3))
 
     # show inset with bar plot showing proportions of points in regions
     if show_inset:
@@ -187,7 +198,10 @@ def plot_pvalue_comparison(p0s, p1s, labels=None, fax=None, ax_lim=None, pval=0.
     return fig, ax
 
 
-def plot_tuning_curves(X, stimuli, n_cols=5, fax=None, include_points=False):
+def plot_tuning_curves(
+    X, stimuli, n_cols=5, fax=None, include_points=False, use_title=False,
+    sort=None
+):
     """Plots a set of tuning curves given a neural design matrix.
 
     Parameters
@@ -215,16 +229,27 @@ def plot_tuning_curves(X, stimuli, n_cols=5, fax=None, include_points=False):
                                 figsize=(1.5 * n_cols, 1.5 * n_rows))
 
     # calculate tuning curves
-    tuning_curves = np.zeros((n_units, n_stimuli))
-    for idx, stimulus in enumerate(unique_stimuli):
-        tuning_curves[:, idx] = np.mean(X[stimuli == stimulus], axis=0)
+    tuning_curves = utils.get_tuning_curve(X, stimuli, aggregator=np.mean)
+
+    # sort units by peak response
+    if sort == 'peak':
+        peak_responses = utils.get_peak_response(X, stimuli)
+        sorted_units = np.argsort(peak_responses)
+    elif sort == 'modulation':
+        modulations = utils.get_tuning_modulation(X, stimuli)
+        sorted_units = np.argsort(modulations)
+    elif sort is None:
+        sorted_units = np.arange(n_units)
+    else:
+        raise ValueError('Improper value for sort.')
 
     # plot each tuning curve
-    for unit_idx, ax in enumerate(axes.ravel()):
+    for ax_idx, ax in enumerate(axes.ravel()):
         # turn off subplot if we've gone past the number of units
-        if unit_idx >= n_units:
+        if ax_idx >= n_units:
             ax.axis('off')
         else:
+            unit_idx = sorted_units[ax_idx]
             # plot individual samples if necessary
             if include_points:
                 # iterate over each stimulus
@@ -237,9 +262,15 @@ def plot_tuning_curves(X, stimuli, n_cols=5, fax=None, include_points=False):
                         color='gray',
                         s=20,
                         alpha=0.5)
+            tuning_curve = tuning_curves[unit_idx]
             # plot tuning curve
-            ax.plot(unique_stimuli, tuning_curves[unit_idx],
+            ax.plot(unique_stimuli, tuning_curve,
                     color='black', linewidth=3, marker='o')
+            if use_title:
+                title = 'R: %0.2f \n M: %0.2f' % (
+                    np.max(tuning_curve), np.max(tuning_curve) - np.min(tuning_curve)
+                )
+                ax.set_title(title, fontsize=13)
         ax.set_xticks([])
         ax.set_yticks([])
         ax.set_xlim([unique_stimuli[0], unique_stimuli[-1]])
@@ -365,6 +396,7 @@ def rot_plot_data(x0, x1, measure, nsamples=10000):
     print('Value: ', val)
     print('Fraction of rotations giving smaller values: ', frac)
     return val, frac, ax
+
 
 def median_ps(ps, dim, fax=None, label=None, dx=0., c='C0'):
     if fax is None:
