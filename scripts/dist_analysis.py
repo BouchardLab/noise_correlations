@@ -61,10 +61,16 @@ def main(args):
             X = pvc11.get_response_matrix(transform=None)
             stimuli = pvc11.get_design_matrix(form='angle')
             if which_neurons == 'tuned':
-                tuned_units = utils.get_tuned_units(X, stimuli,
-                                                    peak_response=args.peak_response,
-                                                    min_modulation=args.min_modulation)
+                tuned_units = utils.get_tuned_units(
+                    X, stimuli,
+                    peak_response=args.peak_response,
+                    min_modulation=args.min_modulation)
                 X = X[:, tuned_units]
+            elif which_neurons == 'responsive':
+                responsive_units = utils.get_responsive_units(
+                    X, stimuli, aggregator=np.mean,
+                    peak_response=args.peak_response)
+                X = X[:, responsive_units]
     # Feller lab data (Mouse RGCs, single-units, drifting gratings)
     elif dataset == 'ret2':
         circular_stim = True
