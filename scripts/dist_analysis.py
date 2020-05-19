@@ -108,12 +108,13 @@ def main(args):
     else:
         n_dimlet_stim_combs = n_dimlets
 
-    p_s_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
-    p_s_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
-    p_r_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
-    p_r_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
-    v_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
-    v_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+    if rank == 0:
+        p_s_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+        p_s_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+        p_r_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+        p_r_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+        v_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+        v_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
 
     # calculate p-values for many dimlets at difference dimensions
     for idx, n_dim in enumerate(dims):
@@ -121,13 +122,21 @@ def main(args):
             t1 = time.time()
             print('=== Dimension %s ===' % n_dim)
         # evaluate p-values using MPI
-        (p_s_lfi[idx], p_s_sdkl[idx],
-         p_r_lfi[idx], p_r_sdkl[idx],
-         v_lfi[idx], v_sdkl[idx]) = dist_compare_nulls_measures(
+        (p_s_lfi_temp, p_s_sdkl_temp,
+         p_r_lfi_temp, p_r_sdkl_temp,
+         v_lfi_temp, v_sdkl_temp) = dist_compare_nulls_measures(
             X=X, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets, rng=rng,
             comm=comm, n_repeats=n_repeats, circular_stim=circular_stim,
             all_stim=all_stim)
+
         if rank == 0:
+            p_s_lfi[idx] = p_s_lfi_temp
+            p_s_sdkl[idx] = p_s_sdkl_temp
+            p_r_lfi[idx] = p_r_lfi_temp
+            p_r_sdkl[idx] = p_r_sdkl_temp
+            v_lfi[idx] = v_lfi_temp
+            v_sdkl[idx] = v_sdkl_temp
+
             print('Loop took %s seconds.\n' % (time.time() - t1))
 
     # save data in root
@@ -144,6 +153,8 @@ def main(args):
         print('Successfully Saved.')
         t2 = time.time()
         print('Job complete. Total time: ', t2 - t0)
+    else:
+        print('Rank %s complete.' % rank)
 
 
 if __name__ == '__main__':
