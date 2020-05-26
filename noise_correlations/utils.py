@@ -73,6 +73,29 @@ def cartesian_product(x, y):
     return np.dstack(np.meshgrid(x, y)).reshape(-1, 2)
 
 
+def get_nonresponsive_for_stim(X, stimuli):
+    """Gets the units that have no response to a specific stimulus.
+
+    Parameters
+    ----------
+    X : ndarray (samples, units)
+        Neural data design matrix.
+    stimuli : ndarray (samples,)
+        The stimulus value for each trial.
+
+    Returns
+    -------
+    unit_idxs : np.ndarray
+        The units that have no response to a specific stimulus.
+    """
+    _, n_units, n_stimuli, unique_stimuli = X_stimuli(X, stimuli)
+    unit_idxs = np.unique([
+        unit for unit in range(n_units) for stim in unique_stimuli
+        if X[stimuli == stim][:, unit].sum() == 0
+    ])
+    return unit_idxs
+
+
 def get_variance_to_mean_ratio(X, stimuli):
     """Gets variance to mean ratio, averaged over unique stimuli.
 
