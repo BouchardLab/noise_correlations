@@ -2,7 +2,6 @@
 randomly chosen sub-populations of different sizes between a shuffle and
 rotation null model."""
 import argparse
-import h5py
 import neuropacks as packs
 import numpy as np
 import os
@@ -30,7 +29,7 @@ def main(args):
     # number of repeats for each dimlet/stim pairing
     n_repeats = args.n_repeats
     # identify which type of neural population we consider
-    which_neurons = args.which_neurons
+    which = args.which
     all_stim = args.limit_stim
 
     # create random state
@@ -56,38 +55,64 @@ def main(args):
     if dataset == 'pvc11':
         circular_stim = True
         if rank == 0:
-            pvc11 = packs.PVC11(data_path=data_path)
+            pack = packs.PVC11(data_path=data_path)
             # get design matrix and stimuli
-            X = pvc11.get_response_matrix(transform=None)
-            stimuli = pvc11.get_design_matrix(form='angle')
-            if which_neurons == 'tuned':
-                tuned_units = utils.get_tuned_units(X, stimuli,
-                                                    peak_response=args.peak_response,
-                                                    min_modulation=args.min_modulation)
+            X = pack.get_response_matrix(transform=None)
+            stimuli = pack.get_design_matrix(form='angle')
+            X = np.delete(X, utils.get_nonresponsive_for_stim(X, stimuli), axis=1)
+            if which == 'tuned':
+                tuned_units = utils.get_tuned_units(
+                    X, stimuli,
+                    peak_response=args.peak_response,
+                    min_modulation=args.min_modulation)
                 X = X[:, tuned_units]
+            elif which == 'responsive':
+                responsive_units = utils.get_responsive_units(
+                    X, stimuli, aggregator=np.mean,
+                    peak_response=args.peak_response)
+                X = X[:, responsive_units]
     # Feller lab data (Mouse RGCs, single-units, drifting gratings)
     elif dataset == 'ret2':
         circular_stim = True
         if rank == 0:
-            ret2 = packs.RET2(data_path=data_path)
+            pack = packs.RET2(data_path=data_path)
             # get design matrix and stimuli
-            X = ret2.get_response_matrix(cells='all', response='max')
-            stimuli = ret2.get_design_matrix(form='angle')
+            X = pack.get_response_matrix(cells='all', response='max')
+            stimuli = pack.get_design_matrix(form='angle')
+            if which == 'tuned':
+                tuned_units = pack.tuned_cells
+                X = X[:, tuned_units]
+            elif which == 'responsive':
+                responsive_units = utils.get_responsive_units(
+                    X, stimuli, aggregator=np.mean,
+                    peak_response=args.peak_response)
+                X = X[:, responsive_units]
     # Bouchard lab data (Rat AC, muECOG, tone pips)
-    elif dataset == 'ac_ecog':
+    elif dataset == 'ac1':
         circular_stim = False
         if rank == 0:
-            with h5py.File(data_path, 'r') as f:
-                resp = f['final_rsp'][:]
-                X = np.transpose(resp[..., 5], axes=(0, 2, 1))
-                trial_medians = np.median(X, axis=-1)
-                keep = (trial_medians.max(axis=1) - trial_medians.min(axis=1)) >= 5.
-                X = X[keep]
+            pack = packs.AC1(data_path=data_path)
+            # get design matrix and stimuli
+            amplitudes = np.arange(2, 8)
+            X = pack.get_response_matrix(amplitudes=amplitudes)
+            stimuli = pack.get_design_matrix(amplitudes=amplitudes)
+            if which == 'tuned':
+                tuned_units = utils.get_tuned_units(
+                    X, stimuli,
+                    peak_response=args.peak_response,
+                    min_modulation=args.min_modulation)
+                X = X[:, tuned_units]
+            elif which == 'responsive':
+                responsive_units = utils.get_responsive_units(
+                    X, stimuli, aggregator=np.mean,
+                    peak_response=args.peak_response)
+                X = X[:, responsive_units]
     else:
         raise ValueError('Dataset not available.')
 
     if rank == 0:
         print('Loaded dataset %s' % dataset)
+        print('Dataset has %s units and %s samples.' % (X.shape[1], X.shape[0]))
     X = Bcast_from_root(X, comm)
     stimuli = Bcast_from_root(stimuli, comm)
     if rank == 0:
@@ -101,12 +126,13 @@ def main(args):
     else:
         n_dimlet_stim_combs = n_dimlets
 
-    p_s_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
-    p_s_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
-    p_r_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
-    p_r_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
-    v_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
-    v_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+    if rank == 0:
+        p_s_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+        p_s_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+        p_r_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+        p_r_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+        v_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+        v_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
 
     # calculate p-values for many dimlets at difference dimensions
     for idx, n_dim in enumerate(dims):
@@ -114,13 +140,21 @@ def main(args):
             t1 = time.time()
             print('=== Dimension %s ===' % n_dim)
         # evaluate p-values using MPI
-        (p_s_lfi[idx], p_s_sdkl[idx],
-         p_r_lfi[idx], p_r_sdkl[idx],
-         v_lfi[idx], v_sdkl[idx]) = dist_compare_nulls_measures(
+        (p_s_lfi_temp, p_s_sdkl_temp,
+         p_r_lfi_temp, p_r_sdkl_temp,
+         v_lfi_temp, v_sdkl_temp) = dist_compare_nulls_measures(
             X=X, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets, rng=rng,
             comm=comm, n_repeats=n_repeats, circular_stim=circular_stim,
             all_stim=all_stim)
+
         if rank == 0:
+            p_s_lfi[idx] = p_s_lfi_temp
+            p_s_sdkl[idx] = p_s_sdkl_temp
+            p_r_lfi[idx] = p_r_lfi_temp
+            p_r_sdkl[idx] = p_r_sdkl_temp
+            v_lfi[idx] = v_lfi_temp
+            v_sdkl[idx] = v_sdkl_temp
+
             print('Loop took %s seconds.\n' % (time.time() - t1))
 
     # save data in root
@@ -137,6 +171,8 @@ def main(args):
         print('Successfully Saved.')
         t2 = time.time()
         print('Job complete. Total time: ', t2 - t0)
+    else:
+        print('Rank %s complete.' % rank)
 
 
 if __name__ == '__main__':
@@ -147,7 +183,7 @@ if __name__ == '__main__':
                         help='Folder where results will be saved.')
     parser.add_argument('--save_tag', type=str, default='',
                         help='Tag to add onto the results folder.')
-    parser.add_argument('--dataset', choices=['pvc11', 'maxd'],
+    parser.add_argument('--dataset', choices=['pvc11', 'ret2', 'ac1'],
                         help='Which dataset to run analysis on.')
     parser.add_argument('--dim_max', type=int,
                         help='The maximum number of units to operate on.')
@@ -156,7 +192,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_repeats', '-s', type=int, default=10000,
                         help='How many repetitions to perform when evaluating'
                              'p-values.')
-    parser.add_argument('--which_neurons', '-which', default='tuned',
+    parser.add_argument('--which', default='tuned',
                         choices=['tuned', 'responsive', 'all'])
     parser.add_argument('--peak_response', type=float, default=10.)
     parser.add_argument('--min_modulation', type=float, default=2.)

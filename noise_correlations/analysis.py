@@ -192,7 +192,7 @@ def generate_dimlets_and_stim_pairs(
         # repeat the units for each stim-set
         units = np.repeat(units, n_stim_sets, axis=0)
         # repeat the stims for each dimlet
-        stims = np.repeat(stims, n_unit_sets, axis=0)
+        stims = np.tile(stims, (n_unit_sets, 1))
 
     # dimlet and stim-pair are chosen randomly, together
     else:
