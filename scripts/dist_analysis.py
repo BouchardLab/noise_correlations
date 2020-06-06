@@ -22,7 +22,7 @@ def main(args):
     dataset = args.dataset
     # the dimensions we consider
     dim_max = args.dim_max
-    dims = np.arange(2, dim_max + 1)
+    dims = np.arange(26, dim_max + 1)
     n_unique_dims = dims.size
     # number of dimlets per dimension
     n_dimlets = args.n_dimlets
@@ -171,8 +171,6 @@ def main(args):
         print('Successfully Saved.')
         t2 = time.time()
         print('Job complete. Total time: ', t2 - t0)
-    else:
-        print('Rank %s complete.' % rank)
 
 
 if __name__ == '__main__':
