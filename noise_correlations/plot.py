@@ -9,6 +9,30 @@ from . import null_models
 from . import utils
 
 
+def get_cmap_color(cmap, val, min_val=0, max_val=1):
+    """Gets the RGBA values for a color in a colormap according to a value in
+    an ordered list.
+
+    Parameters
+    ----------
+    cmap : string
+        The colormap.
+    val : float
+        The value in the list.
+    min_val : float
+        The minimum value of the list.
+    max_val : float
+        The maximum value of the list.
+
+    Returns
+    -------
+    color : tuple
+        A tuple indicating the RGBA values of the color.
+    """
+    idx = int(255 * (val - min_val) / max_val)
+    return plt.get_cmap(cmap)(idx)
+
+
 def scatter_max_ps(Yp, n_boot, ps=None, faxes=None):
     if faxes is None:
         faxes = plt.subplots(1, 2, figsize=(10, 5))
