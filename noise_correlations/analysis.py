@@ -438,6 +438,89 @@ def dist_compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, comm,
     return p_s_lfi, p_s_sdkl, p_r_lfi, p_r_sdkl, v_lfi, v_sdkl
 
 
+def dist_calculate_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, comm,
+                                  n_repeats=10000, circular_stim=False,
+                                  all_stim=True):
+    """Calculates null model distributions for linear Fisher information and
+    symmetric KL-divergence, in a distributed manner.
+
+    This function will calculate values for random dimlets, with neighboring
+    pairwise stimuli.
+
+    Parameters
+    ----------
+    X : ndarray (units, stimuli, trials)
+        Neural data.
+    stimuli : ndarray (samples,)
+        The stimulus value for each trial.
+    n_dim : int
+        Number of units to consider in each dimlet.
+    n_dimlets : int
+        The number of dimlets over which to calculate p-values.
+    rng : RandomState
+        Random state instance.
+    n_repeats : int
+        The number of repetitions to consider when evaluating null models.
+    circular_stim : bool
+        Indicates whether the stimulus is circular.
+    all_stim : bool
+        If True, all consecutive pairs of stimuli are used.
+
+    Returns
+    -------
+    p_s_lfi, p_s_sdkl : ndarray (dimlets,)
+        The p-values on the shuffled dimlets.
+    p_r_lfi, p_r_sdkl : ndarray (dimlets,)
+        The p-values on the rotated dimlets.
+    v_lfi, v_sdkl : ndarray (dimlets,)
+        The values of the LFI/sDKL on the original dimlet.
+    """
+    from mpi_utils.ndarray import Gatherv_rows
+
+    n_samples, n_units = X.shape
+
+    size = comm.size
+    rank = comm.rank
+
+    units, stims = generate_dimlets_and_stim_pairs(
+        n_units=n_units, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets,
+        rng=rng, all_stim=all_stim, circular_stim=circular_stim
+    )
+    # allocate units and stims to the current rank
+    units = np.array_split(units, size)[rank]
+    stims = np.array_split(stims, size)[rank]
+
+    # allocate storage for this rank's p-values
+    my_dimlets = units.shape[0]
+    v_s_lfi = np.zeros((my_dimlets, n_repeats))
+    v_s_sdkl = np.zeros_like(v_s_lfi)
+    v_r_lfi = np.zeros_like(v_s_lfi)
+    v_r_sdkl = np.zeros_like(v_s_lfi)
+    v_lfi = np.zeros_like(v_s_lfi)
+    v_sdkl = np.zeros_like(v_s_lfi)
+
+    for ii in range(my_dimlets):
+        if rank == 0:
+            print('Dimension %s' % n_dim, '{} out of {}'.format(ii + 1, my_dimlets))
+        unit_idxs, stim_vals = units[ii], stims[ii]
+        # calculate values under shuffle and rotation null models
+        (v_s_lfi[ii], v_s_sdkl[ii],
+         v_r_lfi[ii], v_r_sdkl[ii],
+         v_lfi[ii], v_sdkl[ii]) = \
+            inner_compare_nulls_measures(
+                X=X, stimuli=stimuli, unit_idxs=unit_idxs, stim_vals=stim_vals,
+                rng=rng, n_repeats=n_repeats, circular_stim=circular_stim)
+
+    # gather p-values across ranks
+    v_s_lfi = Gatherv_rows(v_s_lfi, comm)
+    v_s_sdkl = Gatherv_rows(v_s_sdkl, comm)
+    v_r_lfi = Gatherv_rows(v_r_lfi, comm)
+    v_r_sdkl = Gatherv_rows(v_r_sdkl, comm)
+    v_lfi = Gatherv_rows(v_lfi, comm)
+    v_sdkl = Gatherv_rows(v_sdkl, comm)
+    return v_s_lfi, v_s_sdkl, v_r_lfi, v_r_sdkl, v_lfi, v_sdkl
+
+
 def dist_compare_dtheta(X, dim, n_dimlets, rng, comm, n_samples=10000,
                         circular_stim=True):
     """Compare p-values across null models.

@@ -127,12 +127,12 @@ def main(args):
         n_dimlet_stim_combs = n_dimlets
 
     if rank == 0:
-        p_s_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
-        p_s_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
-        p_r_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
-        p_r_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
-        v_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
-        v_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+        v_s_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs, n_repeats))
+        v_s_sdkl = np.zeros_like(v_s_lfi)
+        v_r_lfi = np.zeros_like(v_s_lfi)
+        v_r_sdkl = np.zeros_like(v_s_lfi)
+        v_lfi = np.zeros_like(v_s_lfi)
+        v_sdkl = np.zeros_like(v_s_lfi)
 
     # calculate p-values for many dimlets at difference dimensions
     for idx, n_dim in enumerate(dims):
@@ -148,10 +148,10 @@ def main(args):
             all_stim=all_stim)
 
         if rank == 0:
-            p_s_lfi[idx] = p_s_lfi_temp
-            p_s_sdkl[idx] = p_s_sdkl_temp
-            p_r_lfi[idx] = p_r_lfi_temp
-            p_r_sdkl[idx] = p_r_sdkl_temp
+            v_s_lfi[idx] = p_s_lfi_temp
+            v_s_sdkl[idx] = p_s_sdkl_temp
+            v_r_lfi[idx] = p_r_lfi_temp
+            v_r_sdkl[idx] = p_r_sdkl_temp
             v_lfi[idx] = v_lfi_temp
             v_sdkl[idx] = v_sdkl_temp
 
@@ -160,13 +160,13 @@ def main(args):
     # save data in root
     if rank == 0:
         print('Pre-save.')
-        save_name = f'compare_{dataset}_{dim_max}_{n_dimlets}_{n_repeats}.npz'
+        save_name = f'values_{dataset}_{dim_max}_{n_dimlets}_{n_repeats}.npz'
         if save_tag != '':
             save_name = save_tag + '_' + save_name
         save_name = os.path.join(save_folder, save_name)
         np.savez(save_name,
-                 p_s_lfi=p_s_lfi, p_s_sdkl=p_s_sdkl,
-                 p_r_lfi=p_r_lfi, p_r_sdkl=p_r_sdkl,
+                 v_s_lfi=v_s_lfi, v_s_sdkl=v_s_sdkl,
+                 v_r_lfi=v_r_lfi, v_r_sdkl=v_r_sdkl,
                  v_lfi=v_lfi, v_sdkl=v_sdkl)
         print('Successfully Saved.')
         t2 = time.time()
