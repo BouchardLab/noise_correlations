@@ -22,7 +22,7 @@ def main(args):
     dataset = args.dataset
     # the dimensions we consider
     dim_max = args.dim_max
-    dims = np.arange(26, dim_max + 1)
+    dims = np.arange(2, dim_max + 1)
     n_unique_dims = dims.size
     # number of dimlets per dimension
     n_dimlets = args.n_dimlets
@@ -99,8 +99,10 @@ def main(args):
             if which == 'tuned':
                 tuned_units = utils.get_tuned_units(
                     X, stimuli,
+                    tuning_criteria='modulation_frac',
                     peak_response=args.peak_response,
-                    min_modulation=args.min_modulation)
+                    modulation=args.min_modulation,
+                    modulation_frac=0.5)
                 X = X[:, tuned_units]
             elif which == 'responsive':
                 responsive_units = utils.get_responsive_units(

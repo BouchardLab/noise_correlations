@@ -9,7 +9,7 @@ import time
 
 from mpi4py import MPI
 from mpi_utils.ndarray import Bcast_from_root
-from noise_correlations.analysis import dist_compare_nulls_measures
+from noise_correlations.analysis import dist_calculate_nulls_measures
 from noise_correlations import utils
 
 
@@ -22,7 +22,7 @@ def main(args):
     dataset = args.dataset
     # the dimensions we consider
     dim_max = args.dim_max
-    dims = np.arange(26, dim_max + 1)
+    dims = np.arange(2, dim_max + 1)
     n_unique_dims = dims.size
     # number of dimlets per dimension
     n_dimlets = args.n_dimlets
@@ -63,8 +63,10 @@ def main(args):
             if which == 'tuned':
                 tuned_units = utils.get_tuned_units(
                     X, stimuli,
+                    tuning_criteria='modulation_frac',
                     peak_response=args.peak_response,
-                    min_modulation=args.min_modulation)
+                    modulation=args.min_modulation,
+                    modulation_frac=0.5)
                 X = X[:, tuned_units]
             elif which == 'responsive':
                 responsive_units = utils.get_responsive_units(
@@ -140,18 +142,18 @@ def main(args):
             t1 = time.time()
             print('=== Dimension %s ===' % n_dim)
         # evaluate p-values using MPI
-        (p_s_lfi_temp, p_s_sdkl_temp,
-         p_r_lfi_temp, p_r_sdkl_temp,
-         v_lfi_temp, v_sdkl_temp) = dist_compare_nulls_measures(
+        (v_s_lfi_temp, v_s_sdkl_temp,
+         v_r_lfi_temp, v_r_sdkl_temp,
+         v_lfi_temp, v_sdkl_temp) = dist_calculate_nulls_measures(
             X=X, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets, rng=rng,
             comm=comm, n_repeats=n_repeats, circular_stim=circular_stim,
             all_stim=all_stim)
 
         if rank == 0:
-            v_s_lfi[idx] = p_s_lfi_temp
-            v_s_sdkl[idx] = p_s_sdkl_temp
-            v_r_lfi[idx] = p_r_lfi_temp
-            v_r_sdkl[idx] = p_r_sdkl_temp
+            v_s_lfi[idx] = v_s_lfi_temp
+            v_s_sdkl[idx] = v_s_sdkl_temp
+            v_r_lfi[idx] = v_r_lfi_temp
+            v_r_sdkl[idx] = v_r_sdkl_temp
             v_lfi[idx] = v_lfi_temp
             v_sdkl[idx] = v_sdkl_temp
 
