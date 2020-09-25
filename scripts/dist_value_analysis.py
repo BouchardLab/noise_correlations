@@ -133,8 +133,8 @@ def main(args):
         v_s_sdkl = np.zeros_like(v_s_lfi)
         v_r_lfi = np.zeros_like(v_s_lfi)
         v_r_sdkl = np.zeros_like(v_s_lfi)
-        v_lfi = np.zeros_like(v_s_lfi)
-        v_sdkl = np.zeros_like(v_s_lfi)
+        v_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+        v_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
 
     # calculate p-values for many dimlets at difference dimensions
     for idx, n_dim in enumerate(dims):

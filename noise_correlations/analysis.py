@@ -496,8 +496,8 @@ def dist_calculate_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, comm,
     v_s_sdkl = np.zeros_like(v_s_lfi)
     v_r_lfi = np.zeros_like(v_s_lfi)
     v_r_sdkl = np.zeros_like(v_s_lfi)
-    v_lfi = np.zeros_like(v_s_lfi)
-    v_sdkl = np.zeros_like(v_s_lfi)
+    v_lfi = np.zeros(my_dimlets)
+    v_sdkl = np.zeros(my_dimlets)
 
     for ii in range(my_dimlets):
         if rank == 0:
