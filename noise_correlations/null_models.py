@@ -1,5 +1,5 @@
 import numpy as np
-from . import discriminability
+
 from scipy.stats import special_ortho_group
 
 
@@ -41,32 +41,57 @@ def diag_and_scale(mu, cov):
     return mu, factor * diagmat
 
 
-def random_rotation(mus, covs, size=1, rng=None):
-    """Apply a random rotation to cov."""
+def random_rotation(mus, covs, n_rotations=1, rng=None):
+    """Apply a random rotation to a (or multiple) covariance matrix with
+    specified mean.
+
+    Parameters
+    ----------
+    mus : np.ndarray or list of np.ndarray
+        The mean(s) for the responses.
+    covs : np.ndarray or list of np.ndarray
+        The covariance matrix (or multiple) describing the responses.
+    n_rotations : int
+        Number of random rotations to apply.
+    rng : RandomState
+        Random state.
+
+    Returns
+    -------
+    mus : np.ndarray or list of np.ndarray
+        The means.
+    covs : np.ndarray or list of np.ndarray
+        The rotated covariances.
+    """
     if rng is None:
         rng = np.random
     if isinstance(mus, list):
         dim = mus[0].size
     else:
         dim = mus.size
+    # Create random variable that can draw rotations
     sog = special_ortho_group(dim=dim)
-    if size == 1:
+    if n_rotations == 1:
+        # Draw random SO(N) matrix
         rot = sog.rvs(random_state=rng)
+        # Apply rotation covariance(s)
         if isinstance(covs, list):
-            covs = [rot.dot(cov).dot(rot.T) for cov in covs]
+            covs = [rot @ cov @ rot.T for cov in covs]
         else:
-            covs = rot.dot(covs).dot(rot.T)
+            covs = rot @ covs @ rot.T
     else:
-        rots = sog.rvs(size=size, random_state=rng)
+        # Draw multiple rotation matrices
+        rots = sog.rvs(size=n_rotations, random_state=rng)
         if isinstance(mus, list):
             mus = [mu[np.newaxis] for mu in mus]
         else:
             mus = mus[np.newaxis]
+        # Apply series of rotations to covariance(s)
         if isinstance(covs, list):
             covs = [np.einsum('nij, jk, nlk->nil', rots, cov, rots)
                     for cov in covs]
         else:
-            covs = np.einsum('nij, jk, nlk->nil', rots, cov, rots)
+            covs = np.einsum('nij, jk, nlk->nil', rots, covs, rots)
     return mus, covs
 
 
