@@ -349,6 +349,72 @@ def compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, n_repeats=10000,
     return p_s_lfi, p_s_sdkl, p_r_lfi, p_r_sdkl, v_lfi, v_sdkl
 
 
+def calculate_null_measures(X, stimuli, n_dim, n_dimlets, rng,
+                            n_repeats=10000, circular_stim=False,
+                            all_stim=True):
+    """Calculates null model distributions for linear Fisher information and
+    symmetric KL-divergence.
+
+    This function will calculate values for random dimlets, with neighboring
+    pairwise stimuli.
+
+    Parameters
+    ----------
+    X : ndarray (units, stimuli, trials)
+        Neural data.
+    stimuli : ndarray (samples,)
+        The stimulus value for each trial.
+    n_dim : int
+        Number of units to consider in each dimlet.
+    n_dimlets : int
+        The number of dimlets over which to calculate p-values.
+    rng : RandomState
+        Random state instance.
+    n_repeats : int
+        The number of repetitions to consider when evaluating null models.
+    circular_stim : bool
+        Indicates whether the stimulus is circular.
+    all_stim : bool
+        If True, all consecutive pairs of stimuli are used.
+
+    Returns
+    -------
+    p_s_lfi, p_s_sdkl : ndarray (dimlets,)
+        The p-values on the shuffled dimlets.
+    p_r_lfi, p_r_sdkl : ndarray (dimlets,)
+        The p-values on the rotated dimlets.
+    v_lfi, v_sdkl : ndarray (dimlets,)
+        The values of the LFI/sDKL on the original dimlet.
+    """
+    n_samples, n_units = X.shape
+
+    units, stims = generate_dimlets_and_stim_pairs(
+        n_units=n_units, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets,
+        rng=rng, all_stim=all_stim, circular_stim=circular_stim
+    )
+
+    # Allocate storage for this rank's p-values
+    n_pairings = units.shape[0]
+    v_s_lfi = np.zeros((n_pairings, n_repeats))
+    v_s_sdkl = np.zeros_like(v_s_lfi)
+    v_r_lfi = np.zeros_like(v_s_lfi)
+    v_r_sdkl = np.zeros_like(v_s_lfi)
+    v_lfi = np.zeros(n_pairings)
+    v_sdkl = np.zeros(n_pairings)
+
+    for ii in range(n_pairings):
+        unit_idxs, stim_vals = units[ii], stims[ii]
+        # Calculate values under shuffle and rotation null models
+        (v_s_lfi[ii], v_s_sdkl[ii],
+         v_r_lfi[ii], v_r_sdkl[ii],
+         v_lfi[ii], v_sdkl[ii]) = \
+            inner_compare_nulls_measures(
+                X=X, stimuli=stimuli, unit_idxs=unit_idxs, stim_vals=stim_vals,
+                rng=rng, n_repeats=n_repeats, circular_stim=circular_stim)
+
+    return v_s_lfi, v_s_sdkl, v_r_lfi, v_r_sdkl, v_lfi, v_sdkl, units, stims
+
+
 def dist_compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, comm,
                                 n_repeats=10000, circular_stim=False,
                                 all_stim=True):

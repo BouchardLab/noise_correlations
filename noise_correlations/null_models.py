@@ -111,7 +111,7 @@ def random_rotation_data(x, size=1, rng=None):
         return (x - mu).dot(rot.T) + mu
     else:
         rots = sog.rvs(size=size, random_state=rng)
-        rval = np.einsum('ij, klj', x-mu, rots)
+        rval = np.einsum('ij, klj', x - mu, rots)
         return np.transpose(rval, axes=(1, 0, 2)) + mu[np.newaxis]
 
 
