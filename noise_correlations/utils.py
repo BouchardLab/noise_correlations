@@ -412,6 +412,25 @@ def p_value_regions(p0, p1, alpha=0.01):
     return f0_only, f1_only, f_both
 
 
+def compute_angle(v1, v2):
+    """Computes the angle between two vectors.
+
+    Parameters
+    ----------
+    v1, v2 : np.ndarray
+        The vectors.
+
+    Returns
+    -------
+    angle : float
+        The angle, in degrees, between the two vectors.
+    """
+    angle = np.rad2deg(np.arccos(
+        np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+    ))
+    return angle
+
+
 def uniform_correlation_matrix(dim, var, corr, noise_std=0., rng=None):
     """Create a uniform covariance matrix with constant variance and uniform
     pairwise covariance. Will have a single e0 eigenvalue and dim-1 e1
