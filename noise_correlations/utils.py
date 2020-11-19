@@ -431,6 +431,41 @@ def compute_angle(v1, v2):
     return angle
 
 
+def participation_ratio(cov):
+    """Calculate the participation ratio of a covariance matrix.
+
+    Parameters
+    ----------
+    cov : np.ndarray
+        Covariance matrix.
+
+    Returns
+    -------
+    pr : float
+        The participation ratio.
+    """
+    u, _ = np.linalg.eigh(cov)
+    pr = np.sum(u)**2 / np.sum(u**2)
+    return pr
+
+
+def participation_ratio_eig(eig):
+    """Calculate the participation ratio of a set of eigenvalues.
+
+    Parameters
+    ----------
+    eig : np.ndarray
+        The eigenvalues.
+
+    Returns
+    -------
+    pr : float
+        The participation ratio.
+    """
+    pr = np.sum(eig)**2 / np.sum(eig**2)
+    return pr
+
+
 def uniform_correlation_matrix(dim, var, corr, noise_std=0., rng=None):
     """Create a uniform covariance matrix with constant variance and uniform
     pairwise covariance. Will have a single e0 eigenvalue and dim-1 e1
