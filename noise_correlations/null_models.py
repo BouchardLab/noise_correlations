@@ -22,7 +22,7 @@ def shuffle_data(x, size=1, rng=None):
             x[:, ii] = rng.permutation(x[:, ii])
         return x
     else:
-        out = np.zeros((size,) +  x.shape)
+        out = np.zeros((size,) + x.shape)
         for ii in range(size):
             for jj in range(x.shape[1]):
                 out[ii, :, jj] = rng.permutation(x[:, jj])
@@ -149,8 +149,7 @@ def eval_null(mu0, cov0, mu1, cov1, null, measures, nsamples, seed=201811071, sa
             mu1p, cov1p = null(mu1, cov1, rng=rng)
         for jj, m in enumerate(measures):
             values[jj, ii] = m(mu0p, cov0p, mu1p, cov1p)
-    ps = np.count_nonzero(values >= orig_val[:, np.newaxis],
-                                 axis=1) / nsamples
+    ps = np.count_nonzero(values >= orig_val[:, np.newaxis], axis=1) / nsamples
     return orig_val, values, ps
 
 
@@ -192,6 +191,5 @@ def eval_null_data(x0, x1, null, measures, nsamples, seed=201811072, same_null=F
         x1p = x1ps[ii]
         for jj, m in enumerate(measures):
             values[jj, ii] = m(x0p, x1p)
-    ps = np.count_nonzero(values >= orig_val[:, np.newaxis],
-                                 axis=1) / nsamples
+    ps = np.count_nonzero(values >= orig_val[:, np.newaxis], axis=1) / nsamples
     return orig_val, values, ps
