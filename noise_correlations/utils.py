@@ -481,6 +481,40 @@ def uniform_correlation_matrix(dim, var, corr, noise_std=0., rng=None):
     return cov
 
 
+def reflection(A, v):
+    """The reflection function. Useful helper for calculating rotation matrices.
+
+    Parameters
+    ----------
+    A : np.ndarray
+        A matrix.
+    v : np.ndarray
+        A vector.
+    """
+    norm = np.dot(v, v)
+    return A - (2 / norm) * np.outer(v, A @ v)
+
+
+def get_rotation_for_vectors(v1, v2):
+    """The reflection function. Useful helper for calculating rotation matrices.
+
+    Parameters
+    ----------
+    v1, v2 : np.ndarray
+        The vectors between which to find a rotation matrix. The rotation matrix
+        rotates from v1 to v2.
+
+    Returns
+    -------
+    R : np.ndarray
+        The rotation matrix.
+    """
+    dim = v1.size
+    S = reflection(np.identity(dim), v1 + v2)
+    R = reflection(S, v2)
+    return R
+
+
 def subsample_cov(mus, covs, keep, rng):
     if isinstance(mus, list):
         dim = mus[0].size
