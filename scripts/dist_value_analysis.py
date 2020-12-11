@@ -90,13 +90,15 @@ def main(args):
             X = pack.get_response_matrix(cells='all', response='max')
             stimuli = pack.get_design_matrix(form='angle')
             if which == 'tuned':
-                tuned_units = pack.tuned_cells
-                X = X[:, tuned_units]
+                selected_units = pack.tuned_cells
             elif which == 'responsive':
-                responsive_units = utils.get_responsive_units(
-                    X, stimuli, aggregator=np.mean,
-                    peak_response=args.peak_response)
-                X = X[:, responsive_units]
+                selected_units = utils.get_responsive_units(
+                    X=X, stimuli=stimuli,
+                    aggregator=np.mean,
+                    peak_response=args.peak_response,
+                    variance_to_mean=10.)
+            X = X[:, selected_units]
+
     # Bouchard lab data (Rat AC, muECOG, tone pips)
     elif dataset == 'ac1':
         circular_stim = False
@@ -107,16 +109,22 @@ def main(args):
             X = pack.get_response_matrix(amplitudes=amplitudes)
             stimuli = pack.get_design_matrix(amplitudes=amplitudes)
             if which == 'tuned':
-                tuned_units = utils.get_tuned_units(
-                    X, stimuli,
+                selected_units = utils.get_tuned_units(
+                    X=X, stimuli=stimuli,
+                    aggregator=np.mean,
                     peak_response=args.peak_response,
-                    min_modulation=args.min_modulation)
-                X = X[:, tuned_units]
+                    tuning_criteria=args.tuning_criteria,
+                    modulation=args.min_modulation,
+                    modulation_frac=args.modulation_frac,
+                    variance_to_mean=10.)
             elif which == 'responsive':
-                responsive_units = utils.get_responsive_units(
-                    X, stimuli, aggregator=np.mean,
-                    peak_response=args.peak_response)
-                X = X[:, responsive_units]
+                selected_units = utils.get_responsive_units(
+                    X=X, stimuli=stimuli,
+                    aggregator=np.mean,
+                    peak_response=args.peak_response,
+                    variance_to_mean=10.)
+            X = X[:, selected_units]
+
     else:
         raise ValueError('Dataset not available.')
 
