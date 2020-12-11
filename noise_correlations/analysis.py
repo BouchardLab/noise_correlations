@@ -549,13 +549,13 @@ def dist_calculate_nulls_measures(
     size = comm.size
     rank = comm.rank
 
-    units, stims = generate_dimlets_and_stim_pairs(
+    all_units, all_stims = generate_dimlets_and_stim_pairs(
         n_units=n_units, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets,
         rng=rng, all_stim=all_stim, circular_stim=circular_stim
     )
     # allocate units and stims to the current rank
-    units = np.array_split(units, size)[rank]
-    stims = np.array_split(stims, size)[rank]
+    units = np.array_split(all_units, size)[rank]
+    stims = np.array_split(all_stims, size)[rank]
 
     # allocate storage for this rank's p-values
     my_dimlets = units.shape[0]
@@ -586,7 +586,7 @@ def dist_calculate_nulls_measures(
     v_lfi = Gatherv_rows(v_lfi, comm)
     v_sdkl = Gatherv_rows(v_sdkl, comm)
     if return_units:
-        return v_s_lfi, v_s_sdkl, v_r_lfi, v_r_sdkl, v_lfi, v_sdkl, units, stims
+        return v_s_lfi, v_s_sdkl, v_r_lfi, v_r_sdkl, v_lfi, v_sdkl, all_units, all_stims
     else:
         return v_s_lfi, v_s_sdkl, v_r_lfi, v_r_sdkl, v_lfi, v_sdkl
 
