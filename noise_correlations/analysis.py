@@ -114,9 +114,9 @@ def generate_stim_pair(stimuli, rng, circular_stim=False):
 
     # choose random index for stimulus
     if circular_stim:
-        stim_idx = rng.randint(n_stimuli)
+        stim_idx = rng.integers(n_stimuli)
     else:
-        stim_idx = rng.randint(n_stimuli - 1)
+        stim_idx = rng.integers(n_stimuli - 1)
 
     # get stim values from unique stimuli set
     stim_vals = np.sort(np.array(
@@ -200,9 +200,9 @@ def generate_dimlets_and_stim_pairs(
         if n_dimlets >= max_dimlets:
             units = np.array(list(combinations(np.arange(n_units), n_dim)))
             if circular_stim:
-                stim_idx = rng.randint(n_stimuli, size=units.shape[0])
+                stim_idx = rng.integers(n_stimuli, size=units.shape[0])
             else:
-                stim_idx = rng.randint(n_stimuli - 1, size=units.shape[0])
+                stim_idx = rng.integers(n_stimuli - 1, size=units.shape[0])
             stims = np.stack([unique_stimuli[stim_idx],
                               unique_stimuli[(stim_idx + 1) % n_stimuli]],
                              axis=1)
@@ -504,9 +504,10 @@ def dist_compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, comm,
     return p_s_lfi, p_s_sdkl, p_r_lfi, p_r_sdkl, v_lfi, v_sdkl
 
 
-def dist_calculate_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, comm,
-                                  n_repeats=10000, circular_stim=False,
-                                  all_stim=True):
+def dist_calculate_nulls_measures(
+    X, stimuli, n_dim, n_dimlets, rng, comm, n_repeats=10000,
+    circular_stim=False, all_stim=True, return_units=True, verbose=False
+):
     """Calculates null model distributions for linear Fisher information and
     symmetric KL-divergence, in a distributed manner.
 
@@ -566,7 +567,7 @@ def dist_calculate_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, comm,
     v_sdkl = np.zeros(my_dimlets)
 
     for ii in range(my_dimlets):
-        if rank == 0:
+        if rank == 0 and verbose:
             print('Dimension %s' % n_dim, '{} out of {}'.format(ii + 1, my_dimlets))
         unit_idxs, stim_vals = units[ii], stims[ii]
         # calculate values under shuffle and rotation null models
@@ -584,7 +585,10 @@ def dist_calculate_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, comm,
     v_r_sdkl = Gatherv_rows(v_r_sdkl, comm)
     v_lfi = Gatherv_rows(v_lfi, comm)
     v_sdkl = Gatherv_rows(v_sdkl, comm)
-    return v_s_lfi, v_s_sdkl, v_r_lfi, v_r_sdkl, v_lfi, v_sdkl
+    if return_units:
+        return v_s_lfi, v_s_sdkl, v_r_lfi, v_r_sdkl, v_lfi, v_sdkl, units, stims
+    else:
+        return v_s_lfi, v_s_sdkl, v_r_lfi, v_r_sdkl, v_lfi, v_sdkl
 
 
 def dist_compare_dtheta(X, dim, n_dimlets, rng, comm, n_samples=10000,
