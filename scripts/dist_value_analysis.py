@@ -2,6 +2,7 @@
 randomly chosen sub-populations of different sizes between a shuffle and
 rotation null model."""
 import argparse
+import h5py
 import neuropacks as packs
 import numpy as np
 import os
@@ -14,27 +15,27 @@ from noise_correlations import utils
 
 
 def main(args):
-    # process command line arguments
-    # filepath arguments
+    # Filepath arguments
     data_path = args.data_path
     save_folder = args.save_folder
     save_tag = args.save_tag
     dataset = args.dataset
-    # the dimensions we consider
+    # Dimlet dimensions
     dim_max = args.dim_max
     dims = np.arange(2, dim_max + 1)
-    n_unique_dims = dims.size
-    # number of dimlets per dimension
+    n_dims = dims.size
+    # Number of dimlets per dimension
     n_dimlets = args.n_dimlets
-    # number of repeats for each dimlet/stim pairing
+    # Number of repeats for each dim-stim
     n_repeats = args.n_repeats
-    # identify which type of neural population we consider
+    # Identify which neural population we consider
     which = args.which
+    # Whether all stim pairs are used for each dimlet
     all_stim = args.limit_stim
+    # Create random state
+    rng = np.random.default_rng(args.random_seed)
 
-    # create random state
-    rng = np.random.RandomState(args.random_state)
-
+    # MPI communicator
     comm = MPI.COMM_WORLD
     size = comm.size
     rank = comm.rank
@@ -42,13 +43,13 @@ def main(args):
     if rank == 0:
         t0 = time.time()
         print('--------------------------------------------------------------')
-        print('%s processes running, this is rank %s.' % (size, rank))
-        print('Running on dataset %s, up to %s dimensions.' % (dataset, dim_max))
-        print('Using %s dimlets per dimension, and %s repeats per dimlet.'
-              % (n_dimlets, n_repeats))
+        print('>>> Beginning Job...')
+        print(f'{size} processes running, this is rank {rank}.')
+        print(f'Running on dataset {dataset}, up to {dim_max} dimensions.')
+        print(f'Using {n_dimlets} dimlets per dimension, and {n_repeats} repeats per dimlet.')
         print('--------------------------------------------------------------')
 
-    # obtain neural design matrix and broadcast to all ranks
+    # Obtain neural design matrix and broadcast to all ranks
     X = None
     stimuli = None
     # Kohn lab data (Monkey V1, single-units, drifting gratings)
@@ -56,23 +57,30 @@ def main(args):
         circular_stim = True
         if rank == 0:
             pack = packs.PVC11(data_path=data_path)
-            # get design matrix and stimuli
+            # Get design matrix and stimuli
             X = pack.get_response_matrix(transform=None)
             stimuli = pack.get_design_matrix(form='angle')
-            X = np.delete(X, utils.get_nonresponsive_for_stim(X, stimuli), axis=1)
+            non_responsive_stim = utils.get_nonresponsive_for_stim(X, stimuli)
+            if non_responsive_stim.sum() > 0:
+                X = np.delete(X, non_responsive_stim, axis=1)
+            # Sub-sample the design matrix
             if which == 'tuned':
-                tuned_units = utils.get_tuned_units(
-                    X, stimuli,
-                    tuning_criteria='modulation_frac',
+                selected_units = utils.get_tuned_units(
+                    X=X, stimuli=stimuli,
+                    aggregator=np.mean,
                     peak_response=args.peak_response,
+                    tuning_criteria=args.tuning_criteria,
                     modulation=args.min_modulation,
-                    modulation_frac=0.5)
-                X = X[:, tuned_units]
+                    modulation_frac=args.modulation_frac,
+                    variance_to_mean=10.)
             elif which == 'responsive':
-                responsive_units = utils.get_responsive_units(
-                    X, stimuli, aggregator=np.mean,
-                    peak_response=args.peak_response)
-                X = X[:, responsive_units]
+                selected_units = utils.get_responsive_units(
+                    X=X, stimuli=stimuli,
+                    aggregator=np.mean,
+                    peak_response=args.peak_response,
+                    variance_to_mean=10.)
+            X = X[:, selected_units]
+
     # Feller lab data (Mouse RGCs, single-units, drifting gratings)
     elif dataset == 'ret2':
         circular_stim = True
@@ -113,93 +121,107 @@ def main(args):
         raise ValueError('Dataset not available.')
 
     if rank == 0:
-        print('Loaded dataset %s' % dataset)
-        print('Dataset has %s units and %s samples.' % (X.shape[1], X.shape[0]))
+        print('>>> Loading data...')
+        print(f'Loaded dataset {dataset}.')
+        print(f'Dataset has {X.shape[1]} units and {X.shape[0]} samples.')
+
+    # Broadcast design matrix and stimuli
     X = Bcast_from_root(X, comm)
     stimuli = Bcast_from_root(stimuli, comm)
     if rank == 0:
-        print('Broadcasted dataset %s' % dataset)
+        print(f'Broadcasted dataset {dataset}.')
+        print('==============================================================')
+        print('>>> Performing experiment...\n')
 
-    # determine size of p-value array
+    # Obtain storage arrays
     if all_stim and circular_stim:
-        n_dimlet_stim_combs = n_dimlets * np.unique(stimuli).size
+        n_dim_stims = n_dimlets * np.unique(stimuli).size
     elif all_stim and not circular_stim:
-        n_dimlet_stim_combs = n_dimlets * (np.unique(stimuli).size - 1)
+        n_dim_stims = n_dimlets * (np.unique(stimuli).size - 1)
     else:
-        n_dimlet_stim_combs = n_dimlets
+        n_dim_stims = n_dimlets
 
     if rank == 0:
-        v_s_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs, n_repeats))
+        # Observed measures in neural data
+        v_lfi = np.zeros((n_dims, n_dim_stims))
+        v_sdkl = np.zeros_like(v_lfi)
+        # Values of measures across shuffles/rotations
+        v_s_lfi = np.zeros((n_dims, n_dim_stims, n_repeats))
         v_s_sdkl = np.zeros_like(v_s_lfi)
         v_r_lfi = np.zeros_like(v_s_lfi)
         v_r_sdkl = np.zeros_like(v_s_lfi)
-        v_lfi = np.zeros((n_unique_dims, n_dimlet_stim_combs))
-        v_sdkl = np.zeros((n_unique_dims, n_dimlet_stim_combs))
+        # Dim-stim storage
+        units = np.zeros((n_dims, n_dim_stims, np.max(dims)))
+        stims = np.zeros((n_dims, n_dim_stims, 2))
 
-    # calculate p-values for many dimlets at difference dimensions
     for idx, n_dim in enumerate(dims):
         if rank == 0:
             t1 = time.time()
-            print('=== Dimension %s ===' % n_dim)
+            print(f'>>> Dimension {n_dim}')
         # evaluate p-values using MPI
         (v_s_lfi_temp, v_s_sdkl_temp,
          v_r_lfi_temp, v_r_sdkl_temp,
-         v_lfi_temp, v_sdkl_temp) = dist_calculate_nulls_measures(
+         v_lfi_temp, v_sdkl_temp,
+         units_temp, stims_temp) = dist_calculate_nulls_measures(
             X=X, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets, rng=rng,
             comm=comm, n_repeats=n_repeats, circular_stim=circular_stim,
-            all_stim=all_stim)
+            all_stim=all_stim, verbose=args.inner_loop_verbose)
 
         if rank == 0:
+            v_lfi[idx] = v_lfi_temp
+            v_sdkl[idx] = v_sdkl_temp
             v_s_lfi[idx] = v_s_lfi_temp
             v_s_sdkl[idx] = v_s_sdkl_temp
             v_r_lfi[idx] = v_r_lfi_temp
             v_r_sdkl[idx] = v_r_sdkl_temp
-            v_lfi[idx] = v_lfi_temp
-            v_sdkl[idx] = v_sdkl_temp
+            units[idx, :, :n_dim] = units_temp
+            stims[idx] = stims_temp
 
-            print('Loop took %s seconds.\n' % (time.time() - t1))
+            print(f'Loop took {time.time() - t1} seconds.')
+            if idx < dims.size - 1:
+                print('')
 
-    # save data in root
     if rank == 0:
-        print('Pre-save.')
-        save_name = f'values_{dataset}_{dim_max}_{n_dimlets}_{n_repeats}.npz'
+        print('==============================================================')
+        print('>>> Saving data...')
+        # Creating results filename
+        save_name = f'values_{dataset}_{dim_max}_{n_dimlets}_{n_repeats}.h5'
         if save_tag != '':
             save_name = save_tag + '_' + save_name
         save_name = os.path.join(save_folder, save_name)
-        np.savez(save_name,
-                 v_s_lfi=v_s_lfi, v_s_sdkl=v_s_sdkl,
-                 v_r_lfi=v_r_lfi, v_r_sdkl=v_r_sdkl,
-                 v_lfi=v_lfi, v_sdkl=v_sdkl)
+        # Store datasets
+        results = h5py.File(save_name, 'w')
+        results['v_lfi'] = v_lfi
+        results['v_sdkl'] = v_sdkl
+        results['v_s_lfi'] = v_s_lfi
+        results['v_s_sdkl'] = v_s_sdkl
+        results['v_r_lfi'] = v_r_lfi
+        results['v_r_sdkl'] = v_r_sdkl
+        results['units'] = units
+        results['stims'] = stims
+        results.close()
         print('Successfully Saved.')
-        t2 = time.time()
-        print('Job complete. Total time: ', t2 - t0)
+        print('Job complete. Total time:', time.time() - t0)
+        print('--------------------------------------------------------------')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run noise correlations analysis.')
-    parser.add_argument('--data_path', type=str,
-                        help='Path to where the dataset is stored.')
-    parser.add_argument('--save_folder', type=str,
-                        help='Folder where results will be saved.')
-    parser.add_argument('--save_tag', type=str, default='',
-                        help='Tag to add onto the results folder.')
-    parser.add_argument('--dataset', choices=['pvc11', 'ret2', 'ac1'],
-                        help='Which dataset to run analysis on.')
-    parser.add_argument('--dim_max', type=int,
-                        help='The maximum number of units to operate on.')
-    parser.add_argument('--n_dimlets', '-n', type=int, default=1000,
-                        help='How many dimlets to consider.')
-    parser.add_argument('--n_repeats', '-s', type=int, default=10000,
-                        help='How many repetitions to perform when evaluating'
-                             'p-values.')
-    parser.add_argument('--which', default='tuned',
-                        choices=['tuned', 'responsive', 'all'])
+    parser.add_argument('--data_path', type=str)
+    parser.add_argument('--save_folder', default='', type=str)
+    parser.add_argument('--save_tag', type=str, default='')
+    parser.add_argument('--dataset', choices=['pvc11', 'ret2', 'ac1'])
+    parser.add_argument('--dim_max', type=int)
+    parser.add_argument('--n_dimlets', '-n', type=int, default=1000)
+    parser.add_argument('--n_repeats', '-s', type=int, default=1000)
+    parser.add_argument('--which', choices=['tuned', 'responsive', 'all'])
+    parser.add_argument('--tuning_criteria', default='modulation_frac')
     parser.add_argument('--peak_response', type=float, default=10.)
     parser.add_argument('--min_modulation', type=float, default=2.)
-    parser.add_argument('--random_state', '-rs', type=int, default=0,
-                        help='Random state seed.')
-    parser.add_argument('--limit_stim', action='store_false',
-                        help='Do not use all pairwise stimuli for each dimlet.')
+    parser.add_argument('--modulation_frac', type=float, default=0.5)
+    parser.add_argument('--random_seed', '-rs', type=int, default=0)
+    parser.add_argument('--limit_stim', action='store_false')
+    parser.add_argument('--inner_loop_verbose', action='store_true')
     args = parser.parse_args()
 
     main(args)
