@@ -1,4 +1,6 @@
 import numpy as np
+import warnings
+
 from scipy.special import comb
 from scipy.stats import spearmanr as sr
 from scipy.stats import special_ortho_group as sog
@@ -214,6 +216,71 @@ def generate_dimlets_and_stim_pairs(
                 units[ii] = generate_dimlet(n_units, n_dim, rng)
                 stims[ii] = generate_stim_pair(stimuli, rng, circular_stim)
 
+    return units, stims
+
+
+def generate_dimlets_and_stim_pairs_unordered(
+    n_units, stimuli, n_dim, n_dimlets, rng, n_stims_per_dimlet=None
+):
+    """Generates a set of dimlets and stimulus pairs collectively, assuming
+    the stimulus is unordered (e.g., a categorical stimulus).
+
+    Parameters
+    ----------
+    n_units : int
+        The number of units in the population.
+    stimuli : ndarray (n_samples,)
+        The stimulus for each sample in the population.
+    n_dim : int
+        The number of dimensions in the dimlet.
+    n_dimlets : int
+        The number of dimlets over which to average measures.
+    rng : RandomState
+        Random state instance.
+
+    Returns
+    -------
+    units : ndarray (n_sets, n_dim)
+        The units in each dimlet. The number of unique dimlets is given by
+        n_dimlets, but this array may contain repetitions corresponding
+        to multiple stimuli-pairs, depending on all_stim.
+    stims : ndarray (n_sets, n_dim)
+        The stimulus-pair for all comparisons to make. The pairs are chosen
+        to span all possible neighboring pairs for the stimuli (all_stim), or
+        randomly chosen for each dimlet.
+    """
+    unique_stimuli = np.unique(stimuli)
+    n_stimuli = unique_stimuli.size
+
+    # Calculate maximum number of dimlets and stim pairings
+    max_dimlets = comb(n_units, n_dim, exact=True)
+    max_stims = comb(n_stimuli, 2, exact=True)
+
+    if n_stims_per_dimlet is None:
+        n_stims_per_dimlet = max_stims
+    elif n_stims_per_dimlet > max_stims:
+        warnings.warn(
+            'Number of stim-pairs per dimlet is above maximum. Resetting to maximum.'
+        )
+        n_stims_per_dimlet = max_stims
+
+    # Randomly choose dimlets
+    if n_dimlets >= max_dimlets:
+        units = np.array(list(combinations(np.arange(n_units), n_dim)))
+    else:
+        units = np.zeros((n_dimlets, n_dim), dtype=int)
+        for ii in range(n_dimlets):
+            units[ii] = generate_dimlet(n_units, n_dim, rng)
+
+    # Get all stim pairings and shuffle them in place
+    all_stim_pairs = np.array(list(combinations(np.arange(n_stimuli), 2)))
+    rng.shuffle(all_stim_pairs)
+    # Select the subset of stim pairings
+    stims = all_stim_pairs[:n_stims_per_dimlet]
+
+    # Repeat the units for each stim pairing, and vice versa for the stims
+    units = np.repeat(units, n_stims_per_dimlet, axis=0)
+    stims = np.tile(stims, (n_dimlets, 1))
     return units, stims
 
 
@@ -506,7 +573,8 @@ def dist_compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, comm,
 
 def dist_calculate_nulls_measures(
     X, stimuli, n_dim, n_dimlets, rng, comm, n_repeats=10000,
-    circular_stim=False, all_stim=True, return_units=True, verbose=False
+    circular_stim=False, all_stim=True, unordered=False,
+    n_stims_per_dimlet=None, return_units=True, verbose=False
 ):
     """Calculates null model distributions for linear Fisher information and
     symmetric KL-divergence, in a distributed manner.
@@ -549,10 +617,17 @@ def dist_calculate_nulls_measures(
     size = comm.size
     rank = comm.rank
 
-    all_units, all_stims = generate_dimlets_and_stim_pairs(
-        n_units=n_units, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets,
-        rng=rng, all_stim=all_stim, circular_stim=circular_stim
-    )
+    if unordered:
+        all_units, all_stims = generate_dimlets_and_stim_pairs_unordered(
+            n_units=n_units, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets,
+            rng=rng, n_stims_per_dimlet=n_stims_per_dimlet
+        )
+    else:
+        all_units, all_stims = generate_dimlets_and_stim_pairs(
+            n_units=n_units, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets,
+            rng=rng, all_stim=all_stim, circular_stim=circular_stim
+        )
+
     # allocate units and stims to the current rank
     units = np.array_split(all_units, size)[rank]
     stims = np.array_split(all_stims, size)[rank]

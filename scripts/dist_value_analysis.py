@@ -55,6 +55,7 @@ def main(args):
     # Kohn lab data (Monkey V1, single-units, drifting gratings)
     if dataset == 'pvc11':
         circular_stim = True
+        unordered = False
         if rank == 0:
             pack = packs.PVC11(data_path=data_path)
             # Get design matrix and stimuli
@@ -84,6 +85,7 @@ def main(args):
     # Feller lab data (Mouse RGCs, single-units, drifting gratings)
     elif dataset == 'ret2':
         circular_stim = True
+        unordered = False
         if rank == 0:
             pack = packs.RET2(data_path=data_path)
             # get design matrix and stimuli
@@ -102,6 +104,7 @@ def main(args):
     # Bouchard lab data (Rat AC, muECOG, tone pips)
     elif dataset == 'ac1':
         circular_stim = False
+        unordered = False
         if rank == 0:
             pack = packs.AC1(data_path=data_path)
             # get design matrix and stimuli
@@ -125,6 +128,14 @@ def main(args):
                     variance_to_mean=10.)
             X = X[:, selected_units]
 
+    elif dataset == 'cv':
+        circular_stim = False
+        unordered = True
+
+        if rank == 0:
+            pack = packs.CV(data_path=data_path)
+            X = pack.get_response_matrix(accuracies=args.cv_response)
+            stimuli = pack.get_design_matrix(accuracies=args.cv_response)
     else:
         raise ValueError('Dataset not available.')
 
@@ -173,7 +184,9 @@ def main(args):
          units_temp, stims_temp) = dist_calculate_nulls_measures(
             X=X, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets, rng=rng,
             comm=comm, n_repeats=n_repeats, circular_stim=circular_stim,
-            all_stim=all_stim, verbose=args.inner_loop_verbose)
+            all_stim=all_stim, unordered=unordered,
+            n_stims_per_dimlet=args.n_stims_per_dimlets,
+            verbose=args.inner_loop_verbose)
 
         if rank == 0:
             v_lfi[idx] = v_lfi_temp
@@ -230,6 +243,7 @@ if __name__ == '__main__':
     parser.add_argument('--random_seed', '-rs', type=int, default=0)
     parser.add_argument('--limit_stim', action='store_false')
     parser.add_argument('--inner_loop_verbose', action='store_true')
+    parser.add_argument('--cv_response', type=str, default='cv')
     args = parser.parse_args()
 
     main(args)
