@@ -7,7 +7,11 @@ from scipy.stats import special_ortho_group as sog
 from itertools import combinations
 
 from .null_models import shuffle_data, random_rotation
-from .utils import mean_cov, uniform_correlation_matrix, X_stimuli
+from .utils import (mean_cov,
+                    get_rotation_for_vectors,
+                    uniform_correlation_matrix,
+                    X_stimuli)
+
 from .discriminability import (lfi, lfi_data,
                                mv_normal_jeffreys as sdkl,
                                mv_normal_jeffreys_data as sdkl_data)
@@ -804,3 +808,39 @@ def dist_synthetic_data(dim, n_deltas, n_rotations, rng, comm, dim_size=10,
     v_lfi = Gatherv_rows(v_lfi, comm)
     v_sdkl = Gatherv_rows(v_sdkl, comm)
     return p_s_lfi, p_s_sdkl, p_r_lfi, p_r_sdkl, v_lfi, v_sdkl
+
+
+def get_best_cov_statistics(X, stimuli, units, stims, dim_idxs, v_lfi):
+    n_dims, n_pairings = v_lfi.shape
+    corr_optimal_orientation = np.zeros((n_dims - 1, n_pairings))
+
+    for idx, dim_idx in enumerate(dim_idxs):
+        for pairing in range(n_pairings):
+            stim_pairing = stims[dim_idx, pairing]
+            dimlet = units[dim_idx][pairing]
+            stim0_idx = np.argwhere(stimuli == stim_pairing[0]).ravel()
+            stim1_idx = np.argwhere(stimuli == stim_pairing[1]).ravel()
+            X0 = X[stim0_idx][:, dimlet]
+            X1 = X[stim1_idx][:, dimlet]
+
+            # Get means and covariances
+            mu0, cov0 = mean_cov(X0)
+            mu1, cov1 = mean_cov(X1)
+            # Differential correlation direction
+            fpr = mu1 - mu0
+            fpr /= np.linalg.norm(fpr)
+            # Average covariance is used by LFI
+            avg_cov = (cov0 + cov1) / 2.
+            # Get smallest eigenvector from covariance
+            w_small = np.linalg.eigh(avg_cov)[1][:, 0]
+            # Get rotation matrix that brings the smallest eigenvector to the
+            # optimal orientation
+            R = get_rotation_for_vectors(w_small, fpr)
+            optimal_cov = R @ avg_cov @ R.T
+            # Correlation between means and variance in optimal orientation
+            corr_optimal_orientation[idx, pairing] = np.mean(
+                [np.corrcoef(np.diag(optimal_cov), mu0)[0, 1],
+                 np.corrcoef(np.diag(optimal_cov), mu1)[0, 1]]
+            )
+
+    return corr_optimal_orientation
