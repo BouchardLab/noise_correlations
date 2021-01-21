@@ -810,7 +810,9 @@ def dist_synthetic_data(dim, n_deltas, n_rotations, rng, comm, dim_size=10,
     return p_s_lfi, p_s_sdkl, p_r_lfi, p_r_sdkl, v_lfi, v_sdkl
 
 
-def get_optimal_cov_statistics(X, stimuli, units, stims, v_lfi, dim_idxs):
+def get_optimal_cov_statistics(
+    X, stimuli, units, stims, v_lfi, dim_idxs, verbose=False
+):
     """Calculates statistics related to the optimal covariance arrangement
     across an experiment.
 
@@ -828,6 +830,8 @@ def get_optimal_cov_statistics(X, stimuli, units, stims, v_lfi, dim_idxs):
         The observed LFI values.
     dim_idxs : np.ndarray
         The dimension indices for which to calculate statistics.
+    verbose : np.ndarray
+        The verbosity flag.
 
     Returns
     -------
@@ -841,6 +845,8 @@ def get_optimal_cov_statistics(X, stimuli, units, stims, v_lfi, dim_idxs):
 
     # Iterate over chosen dimension
     for idx, dim_idx in enumerate(dim_idxs):
+        if verbose:
+            print(f"Dimension Index {dim_idx}")
         # Iterate over dimlet-stim pairings
         for pairing in range(n_pairings):
             stim_pairing = stims[dim_idx, pairing]
