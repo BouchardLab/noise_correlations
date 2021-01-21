@@ -810,14 +810,41 @@ def dist_synthetic_data(dim, n_deltas, n_rotations, rng, comm, dim_size=10,
     return p_s_lfi, p_s_sdkl, p_r_lfi, p_r_sdkl, v_lfi, v_sdkl
 
 
-def get_best_cov_statistics(X, stimuli, units, stims, dim_idxs, v_lfi):
-    n_dims, n_pairings = v_lfi.shape
-    corr_optimal_orientation = np.zeros((n_dims - 1, n_pairings))
+def get_optimal_cov_statistics(X, stimuli, units, stims, v_lfi, dim_idxs):
+    """Calculates statistics related to the optimal covariance arrangement
+    across an experiment.
 
+    Parameters
+    ----------
+    X : np.ndarray, shape (samples, units)
+        Neural data design matrix.
+    stimuli : np.ndarray, shape (samples,)
+        The stimulus value for each trial.
+    units : np.ndarray, shape (dims, pairings, units)
+        The array of indices per dimlet.
+    stims : np.ndarray, shape (dims, pairings, 2)
+        The stimulus pairing for each dimlet-stim pairing and dimlet dimension.
+    v_lfi : np.ndarray, shape (dims, pairings)
+        The observed LFI values.
+    dim_idxs : np.ndarray
+        The dimension indices for which to calculate statistics.
+
+    Returns
+    -------
+    corr_optimal_orientation : np.ndarray
+        The correlation between the mean and variances of the optimal
+        orientation.
+    """
+    n_dims = dim_idxs.size
+    n_pairings = v_lfi.shape[1]
+    corr_optimal_orientation = np.zeros((n_dims, n_pairings))
+
+    # Iterate over chosen dimension
     for idx, dim_idx in enumerate(dim_idxs):
+        # Iterate over dimlet-stim pairings
         for pairing in range(n_pairings):
             stim_pairing = stims[dim_idx, pairing]
-            dimlet = units[dim_idx][pairing]
+            dimlet = units[dim_idx, pairing][:dim_idx + 2].astype('int')
             stim0_idx = np.argwhere(stimuli == stim_pairing[0]).ravel()
             stim1_idx = np.argwhere(stimuli == stim_pairing[1]).ravel()
             X0 = X[stim0_idx][:, dimlet]
