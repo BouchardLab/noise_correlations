@@ -131,11 +131,16 @@ def main(args):
     elif dataset == 'cv':
         circular_stim = False
         unordered = True
+        all_stim = False
 
         if rank == 0:
             pack = packs.CV(data_path=data_path)
-            X = pack.get_response_matrix(accuracies=args.cv_response)
-            stimuli = pack.get_design_matrix(accuracies=args.cv_response)
+            X = pack.get_response_matrix(stimulus=args.cv_response)
+            stimuli = pack.get_design_matrix(stimulus=args.cv_response)
+            unique_stimuli = np.unique(stimuli)
+            stimuli = np.array([np.argwhere(unique_stimuli == stim).item()
+                               for stim in stimuli])
+
     else:
         raise ValueError('Dataset not available.')
 
@@ -143,6 +148,13 @@ def main(args):
         print('>>> Loading data...')
         print(f'Loaded dataset {dataset}.')
         print(f'Dataset has {X.shape[1]} units and {X.shape[0]} samples.')
+        print(f'Dataset has {np.unique(stimuli).size} unique stimuli.')
+        if unordered:
+            print(
+                f'Dataset is unordered. Using {args.n_stims_per_dimlet} stims per dimlet.'
+            )
+        if circular_stim:
+            print('Dataset has circular stim.')
 
     # Broadcast design matrix and stimuli
     X = Bcast_from_root(X, comm)
@@ -157,6 +169,8 @@ def main(args):
         n_dim_stims = n_dimlets * np.unique(stimuli).size
     elif all_stim and not circular_stim:
         n_dim_stims = n_dimlets * (np.unique(stimuli).size - 1)
+    elif unordered:
+        n_dim_stims = n_dimlets * args.n_stims_per_dimlet
     else:
         n_dim_stims = n_dimlets
 
@@ -185,7 +199,7 @@ def main(args):
             X=X, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets, rng=rng,
             comm=comm, n_repeats=n_repeats, circular_stim=circular_stim,
             all_stim=all_stim, unordered=unordered,
-            n_stims_per_dimlet=args.n_stims_per_dimlets,
+            n_stims_per_dimlet=args.n_stims_per_dimlet,
             verbose=args.inner_loop_verbose)
 
         if rank == 0:
@@ -231,7 +245,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_path', type=str)
     parser.add_argument('--save_folder', default='', type=str)
     parser.add_argument('--save_tag', type=str, default='')
-    parser.add_argument('--dataset', choices=['pvc11', 'ret2', 'ac1'])
+    parser.add_argument('--dataset', choices=['pvc11', 'ret2', 'ac1', 'cv'])
     parser.add_argument('--dim_max', type=int)
     parser.add_argument('--n_dimlets', '-n', type=int, default=1000)
     parser.add_argument('--n_repeats', '-s', type=int, default=1000)
@@ -244,6 +258,7 @@ if __name__ == '__main__':
     parser.add_argument('--limit_stim', action='store_false')
     parser.add_argument('--inner_loop_verbose', action='store_true')
     parser.add_argument('--cv_response', type=str, default='cv')
+    parser.add_argument('--n_stims_per_dimlet', type=int, default=1)
     args = parser.parse_args()
 
     main(args)

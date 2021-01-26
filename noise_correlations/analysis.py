@@ -241,6 +241,8 @@ def generate_dimlets_and_stim_pairs_unordered(
         The number of dimlets over which to average measures.
     rng : RandomState
         Random state instance.
+    n_stims_per_dimlet : int
+        The number of stimulus pairs to use per dimlet.
 
     Returns
     -------
