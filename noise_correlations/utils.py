@@ -431,6 +431,15 @@ def compute_angle(v1, v2):
     return angle
 
 
+def angle2R(angle):
+    """Creates a rotation matrix in two dimensions. Assumes incoming angle is
+    in degrees."""
+    angle = np.deg2rad(angle)
+    R = np.array([[np.cos(angle), -np.sin(angle)],
+                  [np.sin(angle), np.cos(angle)]])
+    return R
+
+
 def participation_ratio(cov):
     """Calculate the participation ratio of a covariance matrix.
 
