@@ -812,6 +812,74 @@ def dist_synthetic_data(dim, n_deltas, n_rotations, rng, comm, dim_size=10,
     return p_s_lfi, p_s_sdkl, p_r_lfi, p_r_sdkl, v_lfi, v_sdkl
 
 
+def get_optimal_orientations(
+    X, stimuli, units, stims, v_lfi, dim_idxs, verbose=False
+):
+    """Calculates the optimal covariance orientation for each dimlet-stim
+    pairing.
+
+    Parameters
+    ----------
+    X : np.ndarray, shape (samples, units)
+        Neural data design matrix.
+    stimuli : np.ndarray, shape (samples,)
+        The stimulus value for each trial.
+    units : np.ndarray, shape (dims, pairings, units)
+        The array of indices per dimlet.
+    stims : np.ndarray, shape (dims, pairings, 2)
+        The stimulus pairing for each dimlet-stim pairing and dimlet dimension.
+    v_lfi : np.ndarray, shape (dims, pairings)
+        The observed LFI values.
+    dim_idxs : np.ndarray
+        The dimension indices for which to calculate statistics.
+    verbose : np.ndarray
+        The verbosity flag.
+
+    Returns
+    -------
+    optimal_covs : dict
+        The optimal covariance matrices for each dimlet-stim pairing.
+    """
+    n_pairings = v_lfi.shape[1]
+    optimal_covs = {}
+    optimal_Rs = {}
+
+    # Iterate over chosen dimension
+    for idx, dim_idx in enumerate(dim_idxs):
+        if verbose:
+            print(f"Dimension Index {dim_idx}")
+        n_dim = dim_idx + 2
+        optimal_cov = np.zeros((n_pairings, n_dim, n_dim))
+        optimal_R = np.zeros_like(optimal_cov)
+        # Iterate over dimlet-stim pairings
+        for pairing in range(n_pairings):
+            # Extract data for the dimlet-stim pairing
+            stim_pairing = stims[dim_idx, pairing]
+            dimlet = units[dim_idx, pairing][:dim_idx + 2].astype('int')
+            stim0_idx = np.argwhere(stimuli == stim_pairing[0]).ravel()
+            stim1_idx = np.argwhere(stimuli == stim_pairing[1]).ravel()
+            X0 = X[stim0_idx][:, dimlet]
+            X1 = X[stim1_idx][:, dimlet]
+            # Get means and covariances
+            mu0, cov0 = mean_cov(X0)
+            mu1, cov1 = mean_cov(X1)
+            # Differential correlation direction
+            fpr = mu1 - mu0
+            fpr /= np.linalg.norm(fpr)
+            # Average covariance is used by LFI
+            avg_cov = (cov0 + cov1) / 2.
+            # Get smallest eigenvector from covariance
+            w_small = np.linalg.eigh(avg_cov)[1][:, 0]
+            # Get rotation matrix that brings the smallest eigenvector to the
+            # optimal orientation
+            R = get_rotation_for_vectors(w_small, fpr)
+            optimal_cov[pairing] = R @ avg_cov @ R.T
+            optimal_R[pairing] = R
+        optimal_covs[idx] = optimal_cov
+        optimal_Rs[idx] = optimal_R
+    return optimal_covs, optimal_Rs
+
+
 def get_optimal_cov_statistics(
     X, stimuli, units, stims, v_lfi, dim_idxs, verbose=False
 ):

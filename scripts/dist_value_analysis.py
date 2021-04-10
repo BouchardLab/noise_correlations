@@ -226,6 +226,8 @@ def main(args):
         save_name = os.path.join(save_folder, save_name)
         # Store datasets
         results = h5py.File(save_name, 'w')
+        results['X'] = X
+        results['stimuli'] = stims
         results['v_lfi'] = v_lfi
         results['v_sdkl'] = v_sdkl
         results['v_s_lfi'] = v_s_lfi
