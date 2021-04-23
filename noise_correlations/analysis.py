@@ -422,9 +422,10 @@ def compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, n_repeats=10000,
     return p_s_lfi, p_s_sdkl, p_r_lfi, p_r_sdkl, v_lfi, v_sdkl
 
 
-def calculate_null_measures(X, stimuli, n_dim, n_dimlets, rng,
-                            n_repeats=10000, circular_stim=False,
-                            all_stim=True):
+def calculate_null_measures(
+    X, stimuli, n_dim, n_dimlets, rng, n_repeats=10000, circular_stim=False,
+    all_stim=True, unordered=False, n_stims_per_dimlet=None, verbose=False
+):
     """Calculates null model distributions for linear Fisher information and
     symmetric KL-divergence.
 
@@ -461,12 +462,18 @@ def calculate_null_measures(X, stimuli, n_dim, n_dimlets, rng,
     """
     n_samples, n_units = X.shape
 
-    units, stims = generate_dimlets_and_stim_pairs(
-        n_units=n_units, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets,
-        rng=rng, all_stim=all_stim, circular_stim=circular_stim
-    )
+    if unordered:
+        units, stims = generate_dimlets_and_stim_pairs_unordered(
+            n_units=n_units, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets,
+            rng=rng, n_stims_per_dimlet=n_stims_per_dimlet
+        )
+    else:
+        units, stims = generate_dimlets_and_stim_pairs(
+            n_units=n_units, stimuli=stimuli, n_dim=n_dim, n_dimlets=n_dimlets,
+            rng=rng, all_stim=all_stim, circular_stim=circular_stim
+        )
 
-    # Allocate storage for this rank's p-values
+    # Allocate storage
     n_pairings = units.shape[0]
     v_s_lfi = np.zeros((n_pairings, n_repeats))
     v_s_sdkl = np.zeros_like(v_s_lfi)
@@ -476,6 +483,9 @@ def calculate_null_measures(X, stimuli, n_dim, n_dimlets, rng,
     v_sdkl = np.zeros(n_pairings)
 
     for ii in range(n_pairings):
+        if verbose:
+            if ii % 10 == 0:
+                print(f"Pairing {ii}.")
         unit_idxs, stim_vals = units[ii], stims[ii]
         # Calculate values under shuffle and rotation null models
         (v_s_lfi[ii], v_s_sdkl[ii],
