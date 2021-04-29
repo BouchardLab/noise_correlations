@@ -360,6 +360,81 @@ def inner_compare_nulls_measures(X, stimuli, unit_idxs, stim_vals, rng, n_repeat
     return v_s_lfi, v_s_sdkl, v_r_lfi, v_r_sdkl, v_lfi, v_sdkl
 
 
+def inner_calculate_nulls_measures(
+    X, stimuli, unit_idxs, stim_vals, Rs, rng, circular_stim=False,
+):
+    """Calculates values of metrics on a dimlet of a neural design matrix under
+    both the shuffled and rotation null models.
+
+    Parameters
+    ----------
+    X : ndarray (samples, units)
+        Neural data design matrix.
+    stimuli : ndarray (samples,)
+        The stimulus value for each trial.
+    unit_idxs : ndarray (dim,)
+        The indices for the units in the dimlet.
+    stim_vals : ndarray
+        The values of a randomly chosen pair of stimuli.
+    rng : RandomState
+        Random state instance.
+    n_repeats : int
+        The number of repetitions to consider when evaluating null models.
+    circular_stim : bool
+        Indicates whether the stimulus is circular.
+
+    Returns
+    -------
+    v_s_lfi, v_s_sdkl : ndarray (reps,)
+        The values of the LFI/sDKL on the shuffled dimlets.
+    v_r_lfi, v_r_sdkl : ndarray (reps,)
+        The values of the LFI/sDKL on the rotated dimlets.
+    v_lfi, v_sdkl : float
+        The values of the LFI/sDKL on the original dimlet.
+    """
+    n_samples, n_units = X.shape
+    n_repeats = Rs.shape[0]
+    # Segment design matrix according to stimuli and units
+    stim0_idx = np.argwhere(stimuli == stim_vals[0]).ravel()
+    stim1_idx = np.argwhere(stimuli == stim_vals[1]).ravel()
+    X0 = X[stim0_idx][:, unit_idxs]
+    X1 = X[stim1_idx][:, unit_idxs]
+    # Sub-design matrix statistics
+    mu0, cov0 = mean_cov(X0)
+    mu1, cov1 = mean_cov(X1)
+    # Calculate stimulus difference
+    if circular_stim:
+        dtheta = np.ediff1d(np.unique(stimuli))[0]
+    else:
+        dtheta = np.diff(stim_vals).item()
+
+    # Calculate values of LFI and sDKL for original datasets
+    v_lfi = lfi(mu0, cov0, mu1, cov1, dtheta=dtheta)
+    v_sdkl = sdkl(mu0, cov0, mu1, cov1)
+    # Values for measures on shuffled data
+    v_s_lfi = np.zeros(n_repeats)
+    v_s_sdkl = np.zeros(n_repeats)
+    # Values for measures on rotated data
+    v_r_lfi = np.zeros(n_repeats)
+    v_r_sdkl = np.zeros(n_repeats)
+
+    for jj in range(n_repeats):
+        # Shuffle null model
+        X0s = shuffle_data(X0, rng=rng)
+        X1s = shuffle_data(X1, rng=rng)
+        v_s_lfi[jj] = lfi_data(X0s, X1s, dtheta=dtheta)
+        v_s_sdkl[jj] = sdkl_data(X0s, X1s)
+        # Rotation null model
+        R1 = Rs[jj, 0]
+        R2 = Rs[jj, 1]
+        cov0r = R1 @ cov0 @ R1.T
+        cov1r = R1 @ cov1 @ R1.T
+        v_r_lfi[jj] = lfi(mu0, cov0r, mu1, cov1r, dtheta=dtheta)
+        cov1r = R2 @ cov1 @ R2.T
+        v_r_sdkl[jj] = sdkl(mu0, cov0r, mu1, cov1r)
+    return v_s_lfi, v_s_sdkl, v_r_lfi, v_r_sdkl, v_lfi, v_sdkl
+
+
 def compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, n_repeats=10000,
                            circular_stim=False):
     """Compare p-values across null models for linear Fisher information and
