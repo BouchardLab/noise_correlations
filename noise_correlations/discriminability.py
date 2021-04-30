@@ -8,7 +8,7 @@ import torch
 from .utils import mean_cov
 
 
-def mv_normal_kl(mu0, cov0, mu1, cov1):
+def mv_normal_kl(mu0, cov0, mu1, cov1, return_trace=False):
     """Calculates the KL Divergence between two multivariate normal
     distributions given their means and covariances.
 
@@ -36,10 +36,14 @@ def mv_normal_kl(mu0, cov0, mu1, cov1):
         tr = np.trace(np.linalg.solve(cov1, cov0))
         means = mean_diff.dot(np.linalg.solve(cov1, mean_diff))
         logdets = np.linalg.slogdet(cov1)[1] - np.linalg.slogdet(cov0)[1]
-    return .5 * (tr + means + logdets - d)
+    kl = .5 * (tr + means + logdets - d)
+    if return_trace:
+        return kl, tr
+    else:
+        return kl
 
 
-def mv_normal_jeffreys(mu0, cov0, mu1, cov1):
+def mv_normal_jeffreys(mu0, cov0, mu1, cov1, return_trace=False):
     """Calculate the symmetric KL Divergence for two multivariate
     normal distributions.
 
@@ -54,12 +58,16 @@ def mv_normal_jeffreys(mu0, cov0, mu1, cov1):
     -------
     Symmetric KL Divergence
     """
-    kl1 = mv_normal_kl(mu0, cov0, mu1, cov1)
-    kl2 = mv_normal_kl(mu1, cov1, mu0, cov0)
-    return .5 * (kl1 + kl2)
+    kl1, tr1 = mv_normal_kl(mu0, cov0, mu1, cov1, True)
+    kl2, tr2 = mv_normal_kl(mu1, cov1, mu0, cov0, True)
+    sdkl = 0.5 * (kl1 + kl2)
+    if return_trace:
+        return sdkl, 0.5 * (tr1 + tr2)
+    else:
+        return sdkl
 
 
-def mv_normal_jeffreys_data(x0, x1):
+def mv_normal_jeffreys_data(x0, x1, return_trace=False):
     """Calculate the symmetric KL Divergence for two multivariate
     normal distributions from two data matrices.
 
@@ -74,7 +82,7 @@ def mv_normal_jeffreys_data(x0, x1):
     """
     mu0, cov0 = mean_cov(x0)
     mu1, cov1 = mean_cov(x1)
-    return mv_normal_jeffreys(mu0, cov0, mu1, cov1)
+    return mv_normal_jeffreys(mu0, cov0, mu1, cov1, return_trace=return_trace)
 
 
 def linear_discriminability(mu0, cov0, mu1, cov1):

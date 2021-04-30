@@ -11,7 +11,6 @@ from .utils import (mean_cov,
                     get_rotation_for_vectors,
                     uniform_correlation_matrix,
                     X_stimuli)
-
 from .discriminability import (lfi, lfi_data,
                                mv_normal_jeffreys as sdkl,
                                mv_normal_jeffreys_data as sdkl_data)
@@ -219,7 +218,6 @@ def generate_dimlets_and_stim_pairs(
             for ii in range(n_dimlets):
                 units[ii] = generate_dimlet(n_units, n_dim, rng)
                 stims[ii] = generate_stim_pair(stimuli, rng, circular_stim)
-
     return units, stims
 
 
@@ -402,6 +400,8 @@ def inner_calculate_nulls_measures(
     # Sub-design matrix statistics
     mu0, cov0 = mean_cov(X0)
     mu1, cov1 = mean_cov(X1)
+    # Calculate optimal orientation
+    _, opt_cov = get_optimal_orientation(mu0, mu1, cov0, cov1)
     # Calculate stimulus difference
     if circular_stim:
         dtheta = np.ediff1d(np.unique(stimuli))[0]
@@ -410,20 +410,22 @@ def inner_calculate_nulls_measures(
 
     # Calculate values of LFI and sDKL for original datasets
     v_lfi = lfi(mu0, cov0, mu1, cov1, dtheta=dtheta)
-    v_sdkl = sdkl(mu0, cov0, mu1, cov1)
+    v_sdkl, v_sdkl_tr = sdkl(mu0, cov0, mu1, cov1, return_trace=True)
     # Values for measures on shuffled data
     v_s_lfi = np.zeros(n_repeats)
     v_s_sdkl = np.zeros(n_repeats)
+    v_s_sdkl_tr = np.zeros(n_repeats)
     # Values for measures on rotated data
     v_r_lfi = np.zeros(n_repeats)
     v_r_sdkl = np.zeros(n_repeats)
+    v_r_sdkl_tr = np.zeros(n_repeats)
 
     for jj in range(n_repeats):
         # Shuffle null model
         X0s = shuffle_data(X0, rng=rng)
         X1s = shuffle_data(X1, rng=rng)
         v_s_lfi[jj] = lfi_data(X0s, X1s, dtheta=dtheta)
-        v_s_sdkl[jj] = sdkl_data(X0s, X1s)
+        v_s_sdkl[jj], v_s_sdkl_tr[jj] = sdkl_data(X0s, X1s, return_trace=True)
         # Rotation null model
         R1 = Rs[jj, 0]
         R2 = Rs[jj, 1]
@@ -431,8 +433,11 @@ def inner_calculate_nulls_measures(
         cov1r = R1 @ cov1 @ R1.T
         v_r_lfi[jj] = lfi(mu0, cov0r, mu1, cov1r, dtheta=dtheta)
         cov1r = R2 @ cov1 @ R2.T
-        v_r_sdkl[jj] = sdkl(mu0, cov0r, mu1, cov1r)
-    return v_s_lfi, v_s_sdkl, v_r_lfi, v_r_sdkl, v_lfi, v_sdkl
+        v_r_sdkl[jj], v_r_sdkl_tr[jj] = sdkl(mu0, cov0r, mu1, cov1r, return_trace=True)
+    return (v_s_lfi, v_s_sdkl, v_s_sdkl_tr,
+            v_r_lfi, v_r_sdkl, v_r_sdkl_tr,
+            v_lfi, v_sdkl, v_sdkl_tr,
+            opt_cov)
 
 
 def compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, n_repeats=10000,
@@ -757,6 +762,132 @@ def dist_calculate_nulls_measures(
         return v_s_lfi, v_s_sdkl, v_r_lfi, v_r_sdkl, v_lfi, v_sdkl
 
 
+def dist_calculate_nulls_measures_w_rotations(
+    X, stimuli, n_dim, n_dimlets, Rs, rng, comm, circular_stim=False,
+    all_stim=True, unordered=False, n_stims_per_dimlet=None, verbose=False
+):
+    """Calculates null model distributions for linear Fisher information and
+    symmetric KL-divergence, in a distributed manner.
+
+    This function will calculate values for random dimlets, with neighboring
+    pairwise stimuli.
+
+    Parameters
+    ----------
+    X : ndarray (units, stimuli, trials)
+        Neural data.
+    stimuli : ndarray (samples,)
+        The stimulus value for each trial.
+    n_dim : int
+        Number of units to consider in each dimlet.
+    n_dimlets : int
+        The number of dimlets over which to calculate p-values.
+    Rs : np.ndarray, shape (n_repeats, 2, n_dim, n_dim)
+        The rotation matrix to use for each repeat.
+    rng : RandomState
+        Random state instance.
+    circular_stim : bool
+        Indicates whether the stimulus is circular.
+    all_stim : bool
+        If True, all consecutive pairs of stimuli are used.
+
+    Returns
+    -------
+    p_s_lfi, p_s_sdkl : ndarray (dimlets,)
+        The p-values on the shuffled dimlets.
+    p_r_lfi, p_r_sdkl : ndarray (dimlets,)
+        The p-values on the rotated dimlets.
+    v_lfi, v_sdkl : ndarray (dimlets,)
+        The values of the LFI/sDKL on the original dimlet.
+    """
+    from mpi_utils.ndarray import Bcast_from_root, Gatherv_rows
+
+    size = comm.size
+    rank = comm.rank
+
+    # Dimensionalities
+    n_samples, n_units = X.shape
+    n_repeats = Rs.shape[1]
+
+    # TODO: adjust this to use stimuli nearby
+    all_units = None
+    all_stims = None
+    if rank == 0:
+        if unordered:
+            all_units, all_stims = generate_dimlets_and_stim_pairs_unordered(
+                n_units=n_units,
+                stimuli=stimuli,
+                n_dim=n_dim,
+                n_dimlets=n_dimlets,
+                rng=rng,
+                n_stims_per_dimlet=n_stims_per_dimlet)
+        else:
+            all_units, all_stims = generate_dimlets_and_stim_pairs(
+                n_units=n_units,
+                stimuli=stimuli,
+                n_dim=n_dim,
+                n_dimlets=n_dimlets,
+                rng=rng,
+                all_stim=all_stim,
+                circular_stim=circular_stim)
+    all_units = Bcast_from_root(all_units, comm)
+    all_stims = Bcast_from_root(all_stims, comm)
+
+    # Allocate units and stims to the current rank
+    units = np.array_split(all_units, size)[rank]
+    stims = np.array_split(all_stims, size)[rank]
+    Rs = np.array_split(Rs, size)[rank]
+
+    # Allocate storage for this rank's p-values
+    my_dimlets = units.shape[0]
+    v_s_lfi = np.zeros((my_dimlets, n_repeats))
+    v_s_sdkl = np.zeros_like(v_s_lfi)
+    v_s_sdkl_tr = np.zeros_like(v_s_lfi)
+    v_r_lfi = np.zeros_like(v_s_lfi)
+    v_r_sdkl = np.zeros_like(v_s_lfi)
+    v_r_sdkl_tr = np.zeros_like(v_s_lfi)
+    v_lfi = np.zeros(my_dimlets)
+    v_sdkl = np.zeros(my_dimlets)
+    v_sdkl_tr = np.zeros(my_dimlets)
+    opt_covs = np.zeros((my_dimlets, n_dim, n_dim))
+    # Iterate over dimlets assigned to this rank
+    for ii in range(my_dimlets):
+        if rank == 0 and verbose:
+            print('Dimension %s' % n_dim, '{} out of {}'.format(ii + 1, my_dimlets))
+        unit_idxs, stim_vals, R = units[ii], stims[ii], Rs[ii]
+        # Calculate values under shuffle and rotation null models
+        (v_s_lfi[ii], v_s_sdkl[ii], v_s_sdkl_tr[ii],
+         v_r_lfi[ii], v_r_sdkl[ii], v_r_sdkl_tr[ii],
+         v_lfi[ii], v_sdkl[ii], v_sdkl_tr[ii],
+         opt_covs[ii]) = \
+            inner_calculate_nulls_measures(
+                X=X,
+                stimuli=stimuli,
+                unit_idxs=unit_idxs,
+                stim_vals=stim_vals,
+                Rs=R,
+                rng=rng,
+                circular_stim=circular_stim)
+
+    # Gather measures across ranks
+    v_s_lfi = Gatherv_rows(v_s_lfi, comm)
+    v_s_sdkl = Gatherv_rows(v_s_sdkl, comm)
+    v_s_sdkl_tr = Gatherv_rows(v_s_sdkl_tr, comm)
+    v_r_lfi = Gatherv_rows(v_r_lfi, comm)
+    v_r_sdkl = Gatherv_rows(v_r_sdkl, comm)
+    v_r_sdkl_tr = Gatherv_rows(v_r_sdkl_tr, comm)
+    v_lfi = Gatherv_rows(v_lfi, comm)
+    v_sdkl = Gatherv_rows(v_sdkl, comm)
+    v_sdkl_tr = Gatherv_rows(v_sdkl_tr, comm)
+    opt_covs = Gatherv_rows(opt_covs, comm)
+
+    return (v_s_lfi, v_s_sdkl, v_s_sdkl_tr,
+            v_r_lfi, v_r_sdkl, v_r_sdkl_tr,
+            v_lfi, v_sdkl, v_sdkl_tr,
+            all_units, all_stims,
+            opt_covs)
+
+
 def dist_compare_dtheta(X, dim, n_dimlets, rng, comm, n_samples=10000,
                         circular_stim=True):
     """Compare p-values across null models.
@@ -895,6 +1026,22 @@ def dist_synthetic_data(dim, n_deltas, n_rotations, rng, comm, dim_size=10,
     v_lfi = Gatherv_rows(v_lfi, comm)
     v_sdkl = Gatherv_rows(v_sdkl, comm)
     return p_s_lfi, p_s_sdkl, p_r_lfi, p_r_sdkl, v_lfi, v_sdkl
+
+
+def get_optimal_orientation(mu0, mu1, cov0, cov1):
+    """Calculate the rotation matrix needed for optimal LFI."""
+    # Differential correlation direction
+    fpr = mu1 - mu0
+    fpr /= np.linalg.norm(fpr)
+    # Average covariance is used by LFI
+    avg_cov = (cov0 + cov1) / 2.
+    # Get smallest eigenvector from covariance
+    w_small = np.linalg.eigh(avg_cov)[1][:, 0]
+    # Get rotation matrix that brings the smallest eigenvector to the
+    # optimal orientation
+    R = get_rotation_for_vectors(w_small, fpr)
+    opt_cov = R @ avg_cov @ R.T
+    return R, opt_cov
 
 
 def get_optimal_orientations(

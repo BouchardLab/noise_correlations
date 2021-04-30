@@ -10,7 +10,7 @@ import time
 
 from mpi4py import MPI
 from mpi_utils.ndarray import Bcast_from_root
-from noise_correlations.analysis import dist_calculate_nulls_measures
+from noise_correlations.analysis import dist_calculate_nulls_measures_w_rotations
 from noise_correlations import utils
 
 
@@ -63,7 +63,7 @@ def main(args):
         if rank == 0:
             pack = packs.PVC11(data_path=data_path)
             # Get design matrix and stimuli
-            X = pack.get_response_matrix(transform=None)
+            X = pack.get_response_matrix(transform=args.transform)
             stimuli = pack.get_design_matrix(form='angle')
             non_responsive_stim = utils.get_nonresponsive_for_stim(X, stimuli)
             if non_responsive_stim.sum() > 0:
@@ -136,21 +136,26 @@ def main(args):
         # Observed measures in neural data
         v_lfi = np.zeros((n_dims, n_dim_stims))
         v_sdkl = np.zeros_like(v_lfi)
+        v_sdkl_tr = np.zeros_like(v_lfi)
         # Values of measures across shuffles/rotations
         v_s_lfi = np.zeros((n_dims, n_dim_stims, n_repeats))
         v_s_sdkl = np.zeros_like(v_s_lfi)
+        v_s_sdkl_tr = np.zeros_like(v_s_lfi)
         v_r_lfi = np.zeros_like(v_s_lfi)
         v_r_sdkl = np.zeros_like(v_s_lfi)
+        v_r_sdkl_tr = np.zeros_like(v_s_lfi)
         # Percentiles of measures
         p_s_lfi = np.zeros((n_dims, n_dim_stims))
         p_s_sdkl = np.zeros_like(p_s_lfi)
         p_r_lfi = np.zeros_like(p_s_lfi)
         p_r_sdkl = np.zeros_like(p_s_lfi)
         # Rotation indices
-        R_idxs = np.zeros((n_dims, n_dim_stims, 2))
+        R_idxs = np.zeros((n_dims, n_dim_stims, n_repeats, 2), dtype=int)
         # Dim-stim storage
-        units = np.zeros((n_dims, n_dim_stims, np.max(dims)))
+        units = np.zeros((n_dims, n_dim_stims, np.max(dims)), dtype=int)
         stims = np.zeros((n_dims, n_dim_stims, 2))
+        # Optimal covariance storage
+        opt_covs = {}
 
     for idx, n_dim in enumerate(dims):
         Rs = None
@@ -158,25 +163,29 @@ def main(args):
             # Get rotations for this dimension
             with h5py.File(rotation_path, 'r') as rotations:
                 Rs = rotations[str(n_dim)][:]
-                R_idx = rng.integers(low=0, high=Rs.shape[0], size=(n_dim_stims, 2))
+                R_idx = rng.integers(
+                    low=0,
+                    high=Rs.shape[0],
+                    size=(n_dim_stims, n_repeats, 2))
                 R_idxs[idx] = R_idx
-                Rs = Rs[R_idx.ravel()].reshape((n_dim_stims, 2, n_dim, n_dim))
+                Rs = Rs[R_idx.ravel()].reshape(R_idx.shape + (n_dim, n_dim))
             t1 = time.time()
             print(f'>>> Dimension {n_dim}')
         Rs = Bcast_from_root(Rs, comm)
 
         # Perform distributed evaluation across null measures
-        (v_s_lfi_temp, v_s_sdkl_temp,
-         v_r_lfi_temp, v_r_sdkl_temp,
-         v_lfi_temp, v_sdkl_temp,
-         units_temp, stims_temp) = dist_calculate_nulls_measures(
+        (v_s_lfi_temp, v_s_sdkl_temp, v_s_sdkl_tr_temp,
+         v_r_lfi_temp, v_r_sdkl_temp, v_r_sdkl_tr_temp,
+         v_lfi_temp, v_sdkl_temp, v_sdkl_tr_temp,
+         units_temp, stims_temp,
+         opt_covs_temp) = dist_calculate_nulls_measures_w_rotations(
             X=X,
             stimuli=stimuli,
             n_dim=n_dim,
             n_dimlets=n_dimlets,
+            Rs=Rs,
             rng=rng,
             comm=comm,
-            n_repeats=n_repeats,
             circular_stim=circular_stim,
             all_stim=all_stim,
             unordered=unordered,
@@ -186,16 +195,20 @@ def main(args):
         if rank == 0:
             v_lfi[idx] = v_lfi_temp
             v_sdkl[idx] = v_sdkl_temp
+            v_sdkl_tr[idx] = v_sdkl_tr_temp
             v_s_lfi[idx] = v_s_lfi_temp
             v_s_sdkl[idx] = v_s_sdkl_temp
+            v_s_sdkl_tr[idx] = v_s_sdkl_tr_temp
             v_r_lfi[idx] = v_r_lfi_temp
             v_r_sdkl[idx] = v_r_sdkl_temp
-            p_s_lfi[idx] = np.count_nonzero(v_lfi_temp[..., np.newaxis] > v_s_lfi_temp)
-            p_r_lfi[idx] = np.count_nonzero(v_lfi_temp[..., np.newaxis] > v_r_lfi_temp)
-            p_s_sdkl[idx] = np.count_nonzero(v_sdkl_temp[..., np.newaxis] > v_s_sdkl_temp)
-            p_r_sdkl[idx] = np.count_nonzero(v_sdkl_temp[..., np.newaxis] > v_r_sdkl_temp)
+            v_r_sdkl_tr[idx] = v_r_sdkl_tr_temp
+            p_s_lfi[idx] = np.mean(v_lfi_temp[..., np.newaxis] > v_s_lfi_temp, axis=-1)
+            p_r_lfi[idx] = np.mean(v_lfi_temp[..., np.newaxis] > v_r_lfi_temp, axis=-1)
+            p_s_sdkl[idx] = np.mean(v_sdkl_temp[..., np.newaxis] > v_s_sdkl_temp, axis=-1)
+            p_r_sdkl[idx] = np.mean(v_sdkl_temp[..., np.newaxis] > v_r_sdkl_temp, axis=-1)
             units[idx, :, :n_dim] = units_temp
             stims[idx] = stims_temp
+            opt_covs[str(n_dim)] = opt_covs_temp
 
             print(f'Loop took {time.time() - t1} seconds.')
 
@@ -210,13 +223,16 @@ def main(args):
         # Store datasets
         results = h5py.File(save_name, 'w')
         results['X'] = X
-        results['stimuli'] = stims
+        results['stimuli'] = stimuli
         results['v_lfi'] = v_lfi
         results['v_sdkl'] = v_sdkl
+        results['v_sdkl_tr'] = v_sdkl_tr
         results['v_s_lfi'] = v_s_lfi
         results['v_s_sdkl'] = v_s_sdkl
+        results['v_s_sdkl_tr'] = v_s_sdkl_tr
         results['v_r_lfi'] = v_r_lfi
         results['v_r_sdkl'] = v_r_sdkl
+        results['v_r_sdkl_tr'] = v_r_sdkl_tr
         results['p_s_lfi'] = p_s_lfi
         results['p_r_lfi'] = p_r_lfi
         results['p_s_sdkl'] = p_s_sdkl
@@ -224,6 +240,9 @@ def main(args):
         results['R_idxs'] = R_idxs
         results['units'] = units
         results['stims'] = stims
+        opt_covs_group = results.create_group('opt_covs')
+        for key, val in opt_covs.items():
+            opt_covs_group[key] = val
         results.close()
         print('Successfully Saved.')
         print('Job complete. Total time:', time.time() - t0)
@@ -246,6 +265,7 @@ if __name__ == '__main__':
     parser.add_argument('--modulation_frac', type=float, default=0.5)
     parser.add_argument('--random_seed', '-rs', type=int, default=0)
     parser.add_argument('--limit_stim', action='store_false')
+    parser.add_argument('--transform')
     parser.add_argument('--inner_loop_verbose', action='store_true')
     parser.add_argument('--cv_response', type=str, default='cv')
     parser.add_argument('--n_stims_per_dimlet', type=int, default=1)
