@@ -154,8 +154,13 @@ def main(args):
         # Dim-stim storage
         units = np.zeros((n_dims, n_dim_stims, np.max(dims)), dtype=int)
         stims = np.zeros((n_dims, n_dim_stims, 2))
-        # Optimal covariance storage
-        opt_covs = {}
+        # Creating results filename
+        save_name = f'{dataset}_{dim_max}_{n_dimlets}_{n_repeats}.h5'
+        if save_tag != '':
+            save_name = save_tag + '_' + save_name
+        save_name = os.path.join(save_folder, save_name)
+        with h5py.File(save_name, 'a') as results:
+            opt_covs_group = results.create_group('opt_covs')
 
     for idx, n_dim in enumerate(dims):
         Rs = None
@@ -208,20 +213,17 @@ def main(args):
             p_r_sdkl[idx] = np.mean(v_sdkl_temp[..., np.newaxis] > v_r_sdkl_temp, axis=-1)
             units[idx, :, :n_dim] = units_temp
             stims[idx] = stims_temp
-            opt_covs[str(n_dim)] = opt_covs_temp
+            with h5py.File(save_name, 'a') as results:
+                opt_covs_group = results['opt_covs']
+                opt_covs_group[str(n_dim)] = opt_covs_temp
 
             print(f'Loop took {time.time() - t1} seconds.')
 
     if rank == 0:
         print('==============================================================')
         print('>>> Saving data...')
-        # Creating results filename
-        save_name = f'{dataset}_{dim_max}_{n_dimlets}_{n_repeats}.h5'
-        if save_tag != '':
-            save_name = save_tag + '_' + save_name
-        save_name = os.path.join(save_folder, save_name)
         # Store datasets
-        results = h5py.File(save_name, 'w')
+        results = h5py.File(save_name, 'a')
         results['X'] = X
         results['stimuli'] = stimuli
         results['v_lfi'] = v_lfi
@@ -240,9 +242,6 @@ def main(args):
         results['R_idxs'] = R_idxs
         results['units'] = units
         results['stims'] = stims
-        opt_covs_group = results.create_group('opt_covs')
-        for key, val in opt_covs.items():
-            opt_covs_group[key] = val
         results.close()
         print('Successfully Saved.')
         print('Job complete. Total time:', time.time() - t0)
