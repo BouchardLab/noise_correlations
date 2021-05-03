@@ -133,34 +133,34 @@ def main(args):
         n_dim_stims = n_dimlets
 
     if rank == 0:
-        # Observed measures in neural data
-        v_lfi = np.zeros((n_dims, n_dim_stims))
-        v_sdkl = np.zeros_like(v_lfi)
-        v_sdkl_tr = np.zeros_like(v_lfi)
-        # Values of measures across shuffles/rotations
-        v_s_lfi = np.zeros((n_dims, n_dim_stims, n_repeats))
-        v_s_sdkl = np.zeros_like(v_s_lfi)
-        v_s_sdkl_tr = np.zeros_like(v_s_lfi)
-        v_r_lfi = np.zeros_like(v_s_lfi)
-        v_r_sdkl = np.zeros_like(v_s_lfi)
-        v_r_sdkl_tr = np.zeros_like(v_s_lfi)
-        # Percentiles of measures
-        p_s_lfi = np.zeros((n_dims, n_dim_stims))
-        p_s_sdkl = np.zeros_like(p_s_lfi)
-        p_r_lfi = np.zeros_like(p_s_lfi)
-        p_r_sdkl = np.zeros_like(p_s_lfi)
-        # Rotation indices
-        R_idxs = np.zeros((n_dims, n_dim_stims, n_repeats, 2), dtype=int)
-        # Dim-stim storage
-        units = np.zeros((n_dims, n_dim_stims, np.max(dims)), dtype=int)
-        stims = np.zeros((n_dims, n_dim_stims, 2))
         # Creating results filename
         save_name = f'{dataset}_{dim_max}_{n_dimlets}_{n_repeats}.h5'
         if save_tag != '':
             save_name = save_tag + '_' + save_name
         save_name = os.path.join(save_folder, save_name)
-        with h5py.File(save_name, 'a') as results:
+        with h5py.File(save_name, 'w') as results:
             opt_covs_group = results.create_group('opt_covs')
+            # Observed measures in neural data
+            results['v_lfi'] = np.zeros((n_dims, n_dim_stims))
+            results['v_sdkl'] = np.zeros((n_dims, n_dim_stims))
+            results['v_sdkl_tr'] = np.zeros((n_dims, n_dim_stims))
+            # Values of measures across shuffles/rotations
+            results['v_s_lfi'] = np.zeros((n_dims, n_dim_stims, n_repeats))
+            results['v_s_sdkl'] = np.zeros((n_dims, n_dim_stims, n_repeats))
+            results['v_s_sdkl_tr'] = np.zeros((n_dims, n_dim_stims, n_repeats))
+            results['v_r_lfi'] = np.zeros((n_dims, n_dim_stims, n_repeats))
+            results['v_r_sdkl'] = np.zeros((n_dims, n_dim_stims, n_repeats))
+            results['v_r_sdkl_tr'] = np.zeros((n_dims, n_dim_stims, n_repeats))
+            # Percentiles of measures
+            results['p_s_lfi'] = np.zeros((n_dims, n_dim_stims))
+            results['p_s_sdkl'] = np.zeros((n_dims, n_dim_stims))
+            results['p_r_lfi'] = np.zeros((n_dims, n_dim_stims))
+            results['p_r_sdkl'] = np.zeros((n_dims, n_dim_stims))
+            # Rotation indices
+            results['R_idxs'] = np.zeros((n_dims, n_dim_stims, n_repeats, 2), dtype=int)
+            # Dim-stim storage
+            results['units'] = np.zeros((n_dims, n_dim_stims, np.max(dims)), dtype=int)
+            results['stims'] = np.zeros((n_dims, n_dim_stims, 2))
 
     for idx, n_dim in enumerate(dims):
         Rs = None
@@ -172,7 +172,6 @@ def main(args):
                     low=0,
                     high=Rs.shape[0],
                     size=(n_dim_stims, n_repeats, 2))
-                R_idxs[idx] = R_idx
                 Rs = Rs[R_idx.ravel()].reshape(R_idx.shape + (n_dim, n_dim))
             t1 = time.time()
             print(f'>>> Dimension {n_dim}')
@@ -198,22 +197,31 @@ def main(args):
             verbose=args.inner_loop_verbose)
 
         if rank == 0:
-            v_lfi[idx] = v_lfi_temp
-            v_sdkl[idx] = v_sdkl_temp
-            v_sdkl_tr[idx] = v_sdkl_tr_temp
-            v_s_lfi[idx] = v_s_lfi_temp
-            v_s_sdkl[idx] = v_s_sdkl_temp
-            v_s_sdkl_tr[idx] = v_s_sdkl_tr_temp
-            v_r_lfi[idx] = v_r_lfi_temp
-            v_r_sdkl[idx] = v_r_sdkl_temp
-            v_r_sdkl_tr[idx] = v_r_sdkl_tr_temp
-            p_s_lfi[idx] = np.mean(v_lfi_temp[..., np.newaxis] > v_s_lfi_temp, axis=-1)
-            p_r_lfi[idx] = np.mean(v_lfi_temp[..., np.newaxis] > v_r_lfi_temp, axis=-1)
-            p_s_sdkl[idx] = np.mean(v_sdkl_temp[..., np.newaxis] > v_s_sdkl_temp, axis=-1)
-            p_r_sdkl[idx] = np.mean(v_sdkl_temp[..., np.newaxis] > v_r_sdkl_temp, axis=-1)
-            units[idx, :, :n_dim] = units_temp
-            stims[idx] = stims_temp
             with h5py.File(save_name, 'a') as results:
+                results['v_lfi'][idx] = v_lfi_temp
+                results['v_sdkl'][idx] = v_sdkl_temp
+                results['v_sdkl_tr'][idx] = v_sdkl_tr_temp
+                results['v_s_lfi'][idx] = v_s_lfi_temp
+                results['v_s_sdkl'][idx] = v_s_sdkl_temp
+                results['v_s_sdkl_tr'][idx] = v_s_sdkl_tr_temp
+                results['v_r_lfi'][idx] = v_r_lfi_temp
+                results['v_r_sdkl'][idx] = v_r_sdkl_temp
+                results['v_r_sdkl_tr'][idx] = v_r_sdkl_tr_temp
+                results['p_s_lfi'][idx] = np.mean(
+                    v_lfi_temp[..., np.newaxis] > v_s_lfi_temp, axis=-1
+                )
+                results['p_r_lfi'][idx] = np.mean(
+                    v_lfi_temp[..., np.newaxis] > v_r_lfi_temp, axis=-1
+                )
+                results['p_s_sdkl'][idx] = np.mean(
+                    v_sdkl_temp[..., np.newaxis] > v_s_sdkl_temp, axis=-1
+                )
+                results['p_r_sdkl'][idx] = np.mean(
+                    v_sdkl_temp[..., np.newaxis] > v_r_sdkl_temp, axis=-1
+                )
+                results['units'][idx, :, :n_dim] = units_temp
+                results['stims'][idx] = stims_temp
+                results['R_idxs'][idx] = R_idx
                 opt_covs_group = results['opt_covs']
                 opt_covs_group[str(n_dim)] = opt_covs_temp
 
@@ -221,27 +229,11 @@ def main(args):
 
     if rank == 0:
         print('==============================================================')
-        print('>>> Saving data...')
+        print('>>> Saving additional data...')
         # Store datasets
         results = h5py.File(save_name, 'a')
         results['X'] = X
         results['stimuli'] = stimuli
-        results['v_lfi'] = v_lfi
-        results['v_sdkl'] = v_sdkl
-        results['v_sdkl_tr'] = v_sdkl_tr
-        results['v_s_lfi'] = v_s_lfi
-        results['v_s_sdkl'] = v_s_sdkl
-        results['v_s_sdkl_tr'] = v_s_sdkl_tr
-        results['v_r_lfi'] = v_r_lfi
-        results['v_r_sdkl'] = v_r_sdkl
-        results['v_r_sdkl_tr'] = v_r_sdkl_tr
-        results['p_s_lfi'] = p_s_lfi
-        results['p_r_lfi'] = p_r_lfi
-        results['p_s_sdkl'] = p_s_sdkl
-        results['p_r_sdkl'] = p_r_sdkl
-        results['R_idxs'] = R_idxs
-        results['units'] = units
-        results['stims'] = stims
         results.close()
         print('Successfully Saved.')
         print('Job complete. Total time:', time.time() - t0)
