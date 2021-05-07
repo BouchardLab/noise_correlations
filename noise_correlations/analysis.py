@@ -410,22 +410,20 @@ def inner_calculate_nulls_measures(
 
     # Calculate values of LFI and sDKL for original datasets
     v_lfi = lfi(mu0, cov0, mu1, cov1, dtheta=dtheta)
-    v_sdkl, v_sdkl_tr = sdkl(mu0, cov0, mu1, cov1, return_trace=True)
+    v_sdkl = sdkl(mu0, cov0, mu1, cov1, return_trace=False)
     # Values for measures on shuffled data
     v_s_lfi = np.zeros(n_repeats)
     v_s_sdkl = np.zeros(n_repeats)
-    v_s_sdkl_tr = np.zeros(n_repeats)
     # Values for measures on rotated data
     v_r_lfi = np.zeros(n_repeats)
     v_r_sdkl = np.zeros(n_repeats)
-    v_r_sdkl_tr = np.zeros(n_repeats)
 
     for jj in range(n_repeats):
         # Shuffle null model
         X0s = shuffle_data(X0, rng=rng)
         X1s = shuffle_data(X1, rng=rng)
         v_s_lfi[jj] = lfi_data(X0s, X1s, dtheta=dtheta)
-        v_s_sdkl[jj], v_s_sdkl_tr[jj] = sdkl_data(X0s, X1s, return_trace=True)
+        v_s_sdkl[jj] = sdkl_data(X0s, X1s, return_trace=False)
         # Rotation null model
         R1 = Rs[jj, 0]
         R2 = Rs[jj, 1]
@@ -433,11 +431,8 @@ def inner_calculate_nulls_measures(
         cov1r = R1 @ cov1 @ R1.T
         v_r_lfi[jj] = lfi(mu0, cov0r, mu1, cov1r, dtheta=dtheta)
         cov1r = R2 @ cov1 @ R2.T
-        v_r_sdkl[jj], v_r_sdkl_tr[jj] = sdkl(mu0, cov0r, mu1, cov1r, return_trace=True)
-    return (v_s_lfi, v_s_sdkl, v_s_sdkl_tr,
-            v_r_lfi, v_r_sdkl, v_r_sdkl_tr,
-            v_lfi, v_sdkl, v_sdkl_tr,
-            opt_cov)
+        v_r_sdkl[jj] = sdkl(mu0, cov0r, mu1, cov1r, return_trace=False)
+    return v_s_lfi, v_s_sdkl, v_r_lfi, v_r_sdkl, v_lfi, v_sdkl, opt_cov
 
 
 def compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, n_repeats=10000,
@@ -842,13 +837,10 @@ def dist_calculate_nulls_measures_w_rotations(
     my_dimlets = units.shape[0]
     v_s_lfi = np.zeros((my_dimlets, n_repeats))
     v_s_sdkl = np.zeros_like(v_s_lfi)
-    v_s_sdkl_tr = np.zeros_like(v_s_lfi)
     v_r_lfi = np.zeros_like(v_s_lfi)
     v_r_sdkl = np.zeros_like(v_s_lfi)
-    v_r_sdkl_tr = np.zeros_like(v_s_lfi)
     v_lfi = np.zeros(my_dimlets)
     v_sdkl = np.zeros(my_dimlets)
-    v_sdkl_tr = np.zeros(my_dimlets)
     opt_covs = np.zeros((my_dimlets, n_dim, n_dim))
     # Iterate over dimlets assigned to this rank
     for ii in range(my_dimlets):
@@ -856,9 +848,9 @@ def dist_calculate_nulls_measures_w_rotations(
             print('Dimension %s' % n_dim, '{} out of {}'.format(ii + 1, my_dimlets))
         unit_idxs, stim_vals, R = units[ii], stims[ii], Rs[ii]
         # Calculate values under shuffle and rotation null models
-        (v_s_lfi[ii], v_s_sdkl[ii], v_s_sdkl_tr[ii],
-         v_r_lfi[ii], v_r_sdkl[ii], v_r_sdkl_tr[ii],
-         v_lfi[ii], v_sdkl[ii], v_sdkl_tr[ii],
+        (v_s_lfi[ii], v_s_sdkl[ii],
+         v_r_lfi[ii], v_r_sdkl[ii],
+         v_lfi[ii], v_sdkl[ii],
          opt_covs[ii]) = \
             inner_calculate_nulls_measures(
                 X=X,
@@ -872,18 +864,15 @@ def dist_calculate_nulls_measures_w_rotations(
     # Gather measures across ranks
     v_s_lfi = Gatherv_rows(v_s_lfi, comm)
     v_s_sdkl = Gatherv_rows(v_s_sdkl, comm)
-    v_s_sdkl_tr = Gatherv_rows(v_s_sdkl_tr, comm)
     v_r_lfi = Gatherv_rows(v_r_lfi, comm)
     v_r_sdkl = Gatherv_rows(v_r_sdkl, comm)
-    v_r_sdkl_tr = Gatherv_rows(v_r_sdkl_tr, comm)
     v_lfi = Gatherv_rows(v_lfi, comm)
     v_sdkl = Gatherv_rows(v_sdkl, comm)
-    v_sdkl_tr = Gatherv_rows(v_sdkl_tr, comm)
     opt_covs = Gatherv_rows(opt_covs, comm)
 
-    return (v_s_lfi, v_s_sdkl, v_s_sdkl_tr,
-            v_r_lfi, v_r_sdkl, v_r_sdkl_tr,
-            v_lfi, v_sdkl, v_sdkl_tr,
+    return (v_s_lfi, v_s_sdkl,
+            v_r_lfi, v_r_sdkl,
+            v_lfi, v_sdkl,
             all_units, all_stims,
             opt_covs)
 

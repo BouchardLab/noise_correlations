@@ -143,14 +143,11 @@ def main(args):
             # Observed measures in neural data
             results['v_lfi'] = np.zeros((n_dims, n_dim_stims))
             results['v_sdkl'] = np.zeros((n_dims, n_dim_stims))
-            results['v_sdkl_tr'] = np.zeros((n_dims, n_dim_stims))
             # Values of measures across shuffles/rotations
             results['v_s_lfi'] = np.zeros((n_dims, n_dim_stims, n_repeats))
             results['v_s_sdkl'] = np.zeros((n_dims, n_dim_stims, n_repeats))
-            results['v_s_sdkl_tr'] = np.zeros((n_dims, n_dim_stims, n_repeats))
             results['v_r_lfi'] = np.zeros((n_dims, n_dim_stims, n_repeats))
             results['v_r_sdkl'] = np.zeros((n_dims, n_dim_stims, n_repeats))
-            results['v_r_sdkl_tr'] = np.zeros((n_dims, n_dim_stims, n_repeats))
             # Percentiles of measures
             results['p_s_lfi'] = np.zeros((n_dims, n_dim_stims))
             results['p_s_sdkl'] = np.zeros((n_dims, n_dim_stims))
@@ -178,9 +175,9 @@ def main(args):
         Rs = Bcast_from_root(Rs, comm)
 
         # Perform distributed evaluation across null measures
-        (v_s_lfi_temp, v_s_sdkl_temp, v_s_sdkl_tr_temp,
-         v_r_lfi_temp, v_r_sdkl_temp, v_r_sdkl_tr_temp,
-         v_lfi_temp, v_sdkl_temp, v_sdkl_tr_temp,
+        (v_s_lfi_temp, v_s_sdkl_temp,
+         v_r_lfi_temp, v_r_sdkl_temp,
+         v_lfi_temp, v_sdkl_temp,
          units_temp, stims_temp,
          opt_covs_temp) = dist_calculate_nulls_measures_w_rotations(
             X=X,
@@ -200,13 +197,10 @@ def main(args):
             with h5py.File(save_name, 'a') as results:
                 results['v_lfi'][idx] = v_lfi_temp
                 results['v_sdkl'][idx] = v_sdkl_temp
-                results['v_sdkl_tr'][idx] = v_sdkl_tr_temp
                 results['v_s_lfi'][idx] = v_s_lfi_temp
                 results['v_s_sdkl'][idx] = v_s_sdkl_temp
-                results['v_s_sdkl_tr'][idx] = v_s_sdkl_tr_temp
                 results['v_r_lfi'][idx] = v_r_lfi_temp
                 results['v_r_sdkl'][idx] = v_r_sdkl_temp
-                results['v_r_sdkl_tr'][idx] = v_r_sdkl_tr_temp
                 results['p_s_lfi'][idx] = np.mean(
                     v_lfi_temp[..., np.newaxis] > v_s_lfi_temp, axis=-1
                 )
