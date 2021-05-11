@@ -132,7 +132,17 @@ def main(args):
     else:
         n_dim_stims = n_dimlets
 
+    R_idxs = None
     if rank == 0:
+        R_idxs = None
+        # Get rotations for this dimension
+        with h5py.File(rotation_path, 'r') as rotations:
+            max_n_Rs = rotations['2'].shape[0]
+            R_idxs = rng.integers(
+                low=0,
+                high=max_n_Rs,
+                size=(n_dims, n_dim_stims, n_repeats, 2))
+            t1 = time.time()
         # Creating results filename
         save_name = f'{dataset}_{dim_max}_{n_dimlets}_{n_repeats}.h5'
         if save_tag != '':
@@ -154,26 +164,15 @@ def main(args):
             results['p_r_lfi'] = np.zeros((n_dims, n_dim_stims))
             results['p_r_sdkl'] = np.zeros((n_dims, n_dim_stims))
             # Rotation indices
-            results['R_idxs'] = np.zeros((n_dims, n_dim_stims, n_repeats, 2), dtype=int)
+            results['R_idxs'] = R_idxs
             # Dim-stim storage
             results['units'] = np.zeros((n_dims, n_dim_stims, np.max(dims)), dtype=int)
             results['stims'] = np.zeros((n_dims, n_dim_stims, 2))
+    R_idxs = Bcast_from_root(R_idxs, comm)
 
     for idx, n_dim in enumerate(dims):
-        Rs = None
         if rank == 0:
-            # Get rotations for this dimension
-            with h5py.File(rotation_path, 'r') as rotations:
-                Rs = rotations[str(n_dim)][:]
-                R_idx = rng.integers(
-                    low=0,
-                    high=Rs.shape[0],
-                    size=(n_dim_stims, n_repeats, 2))
-                Rs = Rs[R_idx.ravel()].reshape(R_idx.shape + (n_dim, n_dim))
-            t1 = time.time()
             print(f'>>> Dimension {n_dim}')
-        Rs = Bcast_from_root(Rs, comm)
-
         # Perform distributed evaluation across null measures
         (v_s_lfi_temp, v_s_sdkl_temp,
          v_r_lfi_temp, v_r_sdkl_temp,
@@ -184,7 +183,8 @@ def main(args):
             stimuli=stimuli,
             n_dim=n_dim,
             n_dimlets=n_dimlets,
-            Rs=Rs,
+            Rs=rotation_path,
+            R_idxs=R_idxs[idx],
             rng=rng,
             comm=comm,
             circular_stim=circular_stim,
@@ -215,7 +215,7 @@ def main(args):
                 )
                 results['units'][idx, :, :n_dim] = units_temp
                 results['stims'][idx] = stims_temp
-                results['R_idxs'][idx] = R_idx
+                results['R_idxs'][idx] = R_idxs
                 opt_covs_group = results['opt_covs']
                 opt_covs_group[str(n_dim)] = opt_covs_temp
 

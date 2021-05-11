@@ -1,3 +1,4 @@
+import h5py
 import numpy as np
 import warnings
 
@@ -758,7 +759,7 @@ def dist_calculate_nulls_measures(
 
 
 def dist_calculate_nulls_measures_w_rotations(
-    X, stimuli, n_dim, n_dimlets, Rs, rng, comm, circular_stim=False,
+    X, stimuli, n_dim, n_dimlets, Rs, R_idxs, rng, comm, circular_stim=False,
     all_stim=True, unordered=False, n_stims_per_dimlet=None, verbose=False
 ):
     """Calculates null model distributions for linear Fisher information and
@@ -796,13 +797,12 @@ def dist_calculate_nulls_measures_w_rotations(
         The values of the LFI/sDKL on the original dimlet.
     """
     from mpi_utils.ndarray import Bcast_from_root, Gatherv_rows
-
     size = comm.size
     rank = comm.rank
 
     # Dimensionalities
     n_samples, n_units = X.shape
-    n_repeats = Rs.shape[1]
+    n_repeats = R_idxs.shape[1]
 
     # TODO: adjust this to use stimuli nearby
     all_units = None
@@ -831,7 +831,7 @@ def dist_calculate_nulls_measures_w_rotations(
     # Allocate units and stims to the current rank
     units = np.array_split(all_units, size)[rank]
     stims = np.array_split(all_stims, size)[rank]
-    Rs = np.array_split(Rs, size)[rank]
+    R_idxs = np.array_split(R_idxs, size)[rank]
 
     # Allocate storage for this rank's p-values
     my_dimlets = units.shape[0]
@@ -846,7 +846,12 @@ def dist_calculate_nulls_measures_w_rotations(
     for ii in range(my_dimlets):
         if rank == 0 and verbose:
             print('Dimension %s' % n_dim, '{} out of {}'.format(ii + 1, my_dimlets))
-        unit_idxs, stim_vals, R = units[ii], stims[ii], Rs[ii]
+        unit_idxs, stim_vals, R_idx = units[ii], stims[ii], R_idxs[ii]
+        if isinstance(Rs, np.ndarray):
+            R = Rs[R_idx.ravel()].reshape(R_idx.shape + (n_units, n_units))
+        else:
+            with h5py.File(Rs, 'r') as rotations:
+                R = rotations[str(n_dim)][R_idx.ravel()].reshape(R_idx.shape + (n_units, n_units))
         # Calculate values under shuffle and rotation null models
         (v_s_lfi[ii], v_s_sdkl[ii],
          v_r_lfi[ii], v_r_sdkl[ii],
