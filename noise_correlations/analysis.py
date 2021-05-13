@@ -851,7 +851,14 @@ def dist_calculate_nulls_measures_w_rotations(
             R = Rs[R_idx.ravel()].reshape(R_idx.shape + (n_units, n_units))
         else:
             with h5py.File(Rs, 'r') as rotations:
-                R = rotations[str(n_dim)][R_idx.ravel()].reshape(R_idx.shape + (n_units, n_units))
+                R_idx_unique, indices = np.unique(R_idx.ravel(), return_inverse=True)
+                # Get rotation matrices used sorted indices
+                R = rotations[str(n_dim)][R_idx_unique]
+                # Re-organized rotation matrices according to original order
+                R = R[np.arange(R_idx_unique.size)[indices]]
+                # Reshape rotation matrices
+                R = R.reshape(R_idx.shape + (n_dim, n_dim))
+
         # Calculate values under shuffle and rotation null models
         (v_s_lfi[ii], v_s_sdkl[ii],
          v_r_lfi[ii], v_r_sdkl[ii],

@@ -215,7 +215,6 @@ def main(args):
                 )
                 results['units'][idx, :, :n_dim] = units_temp
                 results['stims'][idx] = stims_temp
-                results['R_idxs'][idx] = R_idxs
                 opt_covs_group = results['opt_covs']
                 opt_covs_group[str(n_dim)] = opt_covs_temp
 
