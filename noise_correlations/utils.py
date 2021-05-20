@@ -39,9 +39,9 @@ class FACov:
                     break
                 self.k = ki
             if self.k == 0:
-                print(self.k)
-                warnings.warn("FA model was not well constrained for any `k`,"
-                              + " setting `k=1`.", RuntimeWarning)
+                warnings.warn(
+                    "FA model was not well constrained for any `k`,"
+                    " setting `k=1`.", RuntimeWarning)
             self.k = max(self.k, 1)
             model = FA(n_components=self.k, tol=1e-8, svd_method='lapack',
                        noise_variance_init=np.var(X, axis=0))
