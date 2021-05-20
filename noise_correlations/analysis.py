@@ -891,7 +891,7 @@ def dist_calculate_nulls_measures_w_rotations(
 
 
 def inner_calculate_FA_null_measure(X, stimuli, unit_idxs, stim_vals, Rs, rng,
-                                    k, n_repeats, circular_stim=False):
+                                    k, circular_stim=False):
     """Calculates LFI on a dimlet of a neural design matrix under
     both the shuffled and rotation null models for the covariance and FA models.
 
@@ -919,8 +919,7 @@ def inner_calculate_FA_null_measure(X, stimuli, unit_idxs, stim_vals, Rs, rng,
     v_lfi : float
         The values of the LFI/sDKL on the original dimlet.
     """
-    n_samples = X.shape[0]
-    n_units = unit_idxs.size
+    n_repeats = Rs.shape[0]
     # Segment design matrix according to stimuli and units
     stim0_idx = np.argwhere(stimuli == stim_vals[0]).ravel()
     stim1_idx = np.argwhere(stimuli == stim_vals[1]).ravel()
@@ -958,7 +957,7 @@ def inner_calculate_FA_null_measure(X, stimuli, unit_idxs, stim_vals, Rs, rng,
         mu1, cov1r = fac1.params(R0)
         fa_r_lfi[jj] = lfi(mu0, cov0r, mu1, cov1r, dtheta=dtheta)
         mu1, cov1r = fac1.params(R1)
-        fa_r_sdkl[jj] = sdkl(mu0, cov0r, mu1, cov1r, dtheta=dtheta)
+        fa_r_sdkl[jj] = sdkl(mu0, cov0r, mu1, cov1r)
     return fa_r_lfi, fa_r_sdkl, v_lfi, v_sdkl, fa_lfi, fa_sdkl, ks
 
 
