@@ -11,7 +11,8 @@ from .null_models import shuffle_data, random_rotation
 from .utils import (mean_cov,
                     get_rotation_for_vectors,
                     uniform_correlation_matrix,
-                    X_stimuli)
+                    X_stimuli,
+                    FACov)
 from .discriminability import (lfi, lfi_data,
                                mv_normal_jeffreys as sdkl,
                                mv_normal_jeffreys_data as sdkl_data)
@@ -887,6 +888,202 @@ def dist_calculate_nulls_measures_w_rotations(
             v_lfi, v_sdkl,
             all_units, all_stims,
             opt_covs)
+
+
+def inner_calculate_FA_null_measure(X, stimuli, unit_idxs, stim_vals, Rs, rng,
+                                    k, n_repeats, circular_stim=False):
+    """Calculates LFI on a dimlet of a neural design matrix under
+    both the shuffled and rotation null models for the covariance and FA models.
+
+    Parameters
+    ----------
+    X : ndarray (samples, units)
+        Neural data design matrix.
+    stimuli : ndarray (samples,)
+        The stimulus value for each trial.
+    unit_idxs : ndarray (dim,)
+        The indices for the units in the dimlet.
+    stim_vals : ndarray
+        The values of a randomly chosen pair of stimuli.
+    rng : RandomState
+        Random state instance.
+    n_repeats : int
+        The number of repetitions to consider when evaluating null models.
+    circular_stim : bool
+        Indicates whether the stimulus is circular.
+
+    Returns
+    -------
+    v_r_lfi : ndarray (reps,)
+        The values of the LFI/sDKL on the rotated dimlets.
+    v_lfi : float
+        The values of the LFI/sDKL on the original dimlet.
+    """
+    n_samples = X.shape[0]
+    n_units = unit_idxs.size
+    # Segment design matrix according to stimuli and units
+    stim0_idx = np.argwhere(stimuli == stim_vals[0]).ravel()
+    stim1_idx = np.argwhere(stimuli == stim_vals[1]).ravel()
+    X0 = X[stim0_idx][:, unit_idxs]
+    X1 = X[stim1_idx][:, unit_idxs]
+    # Sub-design matrix statistics
+    fac0 = FACov(X0, k=k)
+    fac1 = FACov(X1, k=k)
+    # Calculate stimulus difference
+    if circular_stim:
+        dtheta = np.ediff1d(np.unique(stimuli))[0]
+    else:
+        dtheta = np.diff(stim_vals).item()
+
+    # Calculate values of LFI and sDKL for original datasets
+    mu0, cov0 = mean_cov(X0)
+    mu1, cov1 = mean_cov(X1)
+    v_lfi = lfi(mu0, cov0, mu1, cov1, dtheta=dtheta)
+    v_sdkl = sdkl(mu0, cov0, mu1, cov1)
+    mu0, cov0 = fac0.params()
+    mu1, cov1 = fac1.params()
+    fa_lfi = lfi(mu0, cov0, mu1, cov1, dtheta=dtheta)
+    fa_sdkl = sdkl(mu0, cov0, mu1, cov1)
+    # Values for measures on rotated data
+    fa_r_lfi = np.zeros(n_repeats)
+    fa_r_sdkl = np.zeros(n_repeats)
+
+    for jj in range(n_repeats):
+        # Rotation null model
+        R0 = Rs[jj, 0]
+        R1 = Rs[jj, 1]
+        mu0, cov0r = fac0.params(R0)
+        mu1, cov1r = fac1.params(R0)
+        fa_r_lfi[jj] = lfi(mu0, cov0r, mu1, cov1r, dtheta=dtheta)
+        mu1, cov1r = fac1.params(R1)
+        fa_r_sdkl[jj] = sdkl(mu0, cov0r, mu1, cov1r, dtheta=dtheta)
+    return fa_r_lfi, fa_r_sdkl, v_lfi, v_sdkl, fa_lfi, fa_sdkl
+
+
+def dist_calculate_FA_null_measure_w_rotations(
+    X, stimuli, n_dim, n_dimlets, Rs, R_idxs, rng, comm, circular_stim=False,
+    all_stim=True, unordered=False, n_stims_per_dimlet=None, verbose=False, k=1
+):
+    """Calculates null model distributions for linear Fisher information and
+    symmetric KL-divergence, in a distributed manner.
+
+    This function will calculate values for random dimlets, with neighboring
+    pairwise stimuli.
+
+    Parameters
+    ----------
+    X : ndarray (units, stimuli, trials)
+        Neural data.
+    stimuli : ndarray (samples,)
+        The stimulus value for each trial.
+    n_dim : int
+        Number of units to consider in each dimlet.
+    n_dimlets : int
+        The number of dimlets over which to calculate p-values.
+    Rs : np.ndarray, shape (n_repeats, 2, n_dim, n_dim)
+        The rotation matrix to use for each repeat.
+    rng : RandomState
+        Random state instance.
+    circular_stim : bool
+        Indicates whether the stimulus is circular.
+    all_stim : bool
+        If True, all consecutive pairs of stimuli are used.
+
+    Returns
+    -------
+    p_r_lfi, p_r_sdkl : ndarray (dimlets,)
+        The p-values on the rotated dimlets.
+    v_lfi, v_sdkl : ndarray (dimlets,)
+        The values of the LFI/sDKL on the original dimlet.
+    """
+    from mpi_utils.ndarray import Bcast_from_root, Gatherv_rows
+    size = comm.size
+    rank = comm.rank
+
+    # Dimensionalities
+    n_samples, n_units = X.shape
+    n_repeats = R_idxs.shape[1]
+
+    # TODO: adjust this to use stimuli nearby
+    all_units = None
+    all_stims = None
+    if rank == 0:
+        if unordered:
+            all_units, all_stims = generate_dimlets_and_stim_pairs_unordered(
+                n_units=n_units,
+                stimuli=stimuli,
+                n_dim=n_dim,
+                n_dimlets=n_dimlets,
+                rng=rng,
+                n_stims_per_dimlet=n_stims_per_dimlet)
+        else:
+            all_units, all_stims = generate_dimlets_and_stim_pairs(
+                n_units=n_units,
+                stimuli=stimuli,
+                n_dim=n_dim,
+                n_dimlets=n_dimlets,
+                rng=rng,
+                all_stim=all_stim,
+                circular_stim=circular_stim)
+    all_units = Bcast_from_root(all_units, comm)
+    all_stims = Bcast_from_root(all_stims, comm)
+
+    # Allocate units and stims to the current rank
+    units = np.array_split(all_units, size)[rank]
+    stims = np.array_split(all_stims, size)[rank]
+    R_idxs = np.array_split(R_idxs, size)[rank]
+
+    # Allocate storage for this rank's p-values
+    my_dimlets = units.shape[0]
+    fa_r_lfi = np.zeros((my_dimlets, n_repeats))
+    fa_r_sdkl = np.zeros_like(fa_r_lfi)
+    v_lfi = np.zeros(my_dimlets)
+    v_sdkl = np.zeros(my_dimlets)
+    fa_lfi = np.zeros(my_dimlets)
+    fa_sdkl = np.zeros(my_dimlets)
+    # Iterate over dimlets assigned to this rank
+    for ii in range(my_dimlets):
+        if rank == 0 and verbose:
+            print('Dimension %s' % n_dim, '{} out of {}'.format(ii + 1, my_dimlets))
+        unit_idxs, stim_vals, R_idx = units[ii], stims[ii], R_idxs[ii]
+        if isinstance(Rs, np.ndarray):
+            R = Rs[R_idx.ravel()].reshape(R_idx.shape + (n_units, n_units))
+        else:
+            with h5py.File(Rs, 'r') as rotations:
+                R_idx_unique, indices = np.unique(R_idx.ravel(), return_inverse=True)
+                # Get rotation matrices used sorted indices
+                R = rotations[str(n_dim)][R_idx_unique]
+                # Re-organized rotation matrices according to original order
+                R = R[np.arange(R_idx_unique.size)[indices]]
+                # Reshape rotation matrices
+                R = R.reshape(R_idx.shape + (n_dim, n_dim))
+
+        # Calculate values under shuffle and rotation null models
+        (fa_r_lfi[ii], fa_r_sdkl[ii],
+         v_lfi[ii], v_sdkl[ii],
+         fa_lfi[ii], fa_sdkl[ii]) =\
+            inner_calculate_FA_null_measure(
+                X=X,
+                stimuli=stimuli,
+                unit_idxs=unit_idxs,
+                stim_vals=stim_vals,
+                Rs=R,
+                rng=rng,
+                circular_stim=circular_stim,
+                k=k)
+
+    # Gather measures across ranks
+    fa_r_lfi = Gatherv_rows(fa_r_lfi, comm)
+    fa_r_sdkl = Gatherv_rows(fa_r_sdkl, comm)
+    v_lfi = Gatherv_rows(v_lfi, comm)
+    v_sdkl = Gatherv_rows(v_sdkl, comm)
+    fa_lfi = Gatherv_rows(fa_lfi, comm)
+    fa_sdkl = Gatherv_rows(fa_sdkl, comm)
+
+    return (fa_r_lfi, fa_r_sdkl,
+            v_lfi, v_sdkl,
+            fa_lfi, fa_sdkl,
+            all_units, all_stims)
 
 
 def dist_compare_dtheta(X, dim, n_dimlets, rng, comm, n_samples=10000,

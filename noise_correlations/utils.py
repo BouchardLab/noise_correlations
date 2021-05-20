@@ -1,6 +1,42 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as ss
+from sklearn.decomposition import FactorAnalysis as FA
+
+
+class FACov:
+    def __init__(self, X, k):
+        """Class to represent a multivariate covarince parameterized by a
+        Factor Analysis model. Can rotate the shared variability.
+
+        Parameters
+        ----------
+        X : ndarray (samples, units)
+            Neural data.
+        k : int
+            Number of factors to include.
+        """
+        self.mean = X.mean(axis=0, keepdims=True)
+        model = FA(n_components=k, tol=1e-8, svd_method='lapack',
+                   noise_variance_init=np.var(X, axis=0))
+        model.fit(X)
+        self.private = model.noise_variance_
+        self.shared = model.components_.T @ model.components_
+
+    def params(self, R=None):
+        """Return the mean and covariance.
+
+        Parameters
+        ----------
+        R : ndarray
+            Optional rotation matrix.
+        """
+        if R is None:
+            cov = np.diag(self.private) + self.shared
+        else:
+            components = self.shared @ R.T
+            cov = np.diag(self.private) + components.T @ components
+        return self.mean, cov
 
 
 def circular_difference(v1, v2, maximum=360):
