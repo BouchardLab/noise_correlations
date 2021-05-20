@@ -34,7 +34,6 @@ class FACov:
                 model0.fit(X)
                 cc = np.corrcoef(model.noise_variance_,
                                  model0.noise_variance_)[0, 1]
-                print(ki, cc)
                 if cc < .95:
                     self.k = ki - 1
                     break
@@ -67,7 +66,7 @@ class FACov:
         else:
             shared = self.shared @ R.T
             cov = np.diag(self.private) + shared.T @ shared
-        return self.mean, cov
+        return self.mean.ravel(), cov
 
 
 def circular_difference(v1, v2, maximum=360):
@@ -599,16 +598,6 @@ def get_rotation_for_vectors(v1, v2):
     S = reflection(np.identity(dim), v1 + v2)
     R = reflection(S, v2)
     return R
-
-
-def get_tuning_preferences_pvc11(pack, transform=None, index=False):
-    X = pack.get_design_matrix(form='cosine2')
-    Y = pack.get_response_matrix(transform=transform)
-    ols = LinearRegression(fit_intercept=True)
-    ols.fit(X, Y)
-    tuning_coefs = ols.coef_
-    _, preferences = pack.get_tuning_modulation_and_preference(tuning_coefs)
-    return preferences
 
 
 def subsample_cov(mus, covs, keep, rng):
