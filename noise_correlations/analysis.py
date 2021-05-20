@@ -962,7 +962,7 @@ def inner_calculate_FA_null_measure(X, stimuli, unit_idxs, stim_vals, Rs, rng,
 
 def dist_calculate_FA_null_measure_w_rotations(
     X, stimuli, n_dim, n_dimlets, Rs, R_idxs, rng, comm, circular_stim=False,
-    all_stim=True, unordered=False, n_stims_per_dimlet=None, verbose=False, k=1
+    all_stim=True, unordered=False, n_stims_per_dimlet=None, verbose=False, k=None
 ):
     """Calculates null model distributions for linear Fisher information and
     symmetric KL-divergence, in a distributed manner.

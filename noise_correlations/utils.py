@@ -5,7 +5,7 @@ from sklearn.decomposition import FactorAnalysis as FA
 
 
 class FACov:
-    def __init__(self, X, k):
+    def __init__(self, X, k=None):
         """Class to represent a multivariate covarince parameterized by a
         Factor Analysis model. Can rotate the shared variability.
 
@@ -16,12 +16,34 @@ class FACov:
         k : int
             Number of factors to include.
         """
+        self.k = k
         self.mean = X.mean(axis=0, keepdims=True)
-        model = FA(n_components=k, tol=1e-8, svd_method='lapack',
-                   noise_variance_init=np.var(X, axis=0))
+        X = X - self.mean
+        if k is None:
+            d = X.shape[1]
+            kmax = (d - 1) // 2
+            for ki in range(1, kmax + 1):
+                model = FA(n_components=ki, tol=1e-8, svd_method='lapack',
+                           noise_variance_init=np.var(X, axis=0))
+                model0 = FA(n_components=ki, tol=1e-8, svd_method='lapack')
+                model.fit(X)
+                model0.fit(X)
+                cc = np.corrcoef(model.noise_variance_,
+                                 model0.noise_variance_)[0, 1]
+                print(ki, cc)
+                if cc < .95:
+                    self.k = ki - 1
+                    break
+                self.k = ki
+            model = FA(n_components=self.k, tol=1e-8, svd_method='lapack',
+                       noise_variance_init=np.var(X, axis=0))
+            model.fit(X)
+        else:
+            model = FA(n_components=k, tol=1e-8, svd_method='lapack',
+                       noise_variance_init=np.var(X, axis=0))
         model.fit(X)
         self.private = model.noise_variance_
-        self.shared = model.components_.T @ model.components_
+        self.shared = model.components_
 
     def params(self, R=None):
         """Return the mean and covariance.
@@ -32,10 +54,10 @@ class FACov:
             Optional rotation matrix.
         """
         if R is None:
-            cov = np.diag(self.private) + self.shared
+            cov = np.diag(self.private) + self.shared.T @ self.shared
         else:
-            components = self.shared @ R.T
-            cov = np.diag(self.private) + components.T @ components
+            shared = self.shared @ R.T
+            cov = np.diag(self.private) + shared.T @ shared
         return self.mean, cov
 
 
