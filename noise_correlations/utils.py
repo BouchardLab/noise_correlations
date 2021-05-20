@@ -34,13 +34,11 @@ class FACov:
                 model0.fit(X)
                 cc = np.corrcoef(model.noise_variance_,
                                  model0.noise_variance_)[0, 1]
-                print(ki, cc)
                 if cc < .95:
                     self.k = ki - 1
                     break
                 self.k = ki
             if self.k == 0:
-                print(self.k)
                 warnings.warn("FA model was not well constrained for any `k`,"
                               + " setting `k=1`.", RuntimeWarning)
             self.k = max(self.k, 1)
