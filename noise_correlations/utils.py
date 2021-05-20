@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as ss
 from sklearn.decomposition import FactorAnalysis as FA
+import warnings
 
 
 class FACov:
@@ -16,11 +17,13 @@ class FACov:
         k : int
             Number of factors to include.
         """
+        d = X.shape[1]
+        if d < 3:
+            raise ValueError('FA model only works for d > 2.')
         self.k = k
         self.mean = X.mean(axis=0, keepdims=True)
         X = X - self.mean
         if k is None:
-            d = X.shape[1]
             kmax = (d - 1) // 2
             for ki in range(1, kmax + 1):
                 model = FA(n_components=ki, tol=1e-8, svd_method='lapack',
@@ -35,6 +38,10 @@ class FACov:
                     self.k = ki - 1
                     break
                 self.k = ki
+            if self.k == 0:
+                warnings.warn("FA model was not well constrained for any `k`," +
+                              " setting `k=1`.")
+            self.k = max(self.k, 1)
             model = FA(n_components=self.k, tol=1e-8, svd_method='lapack',
                        noise_variance_init=np.var(X, axis=0))
             model.fit(X)
