@@ -947,6 +947,8 @@ def inner_calculate_FA_null_measure(X, stimuli, unit_idxs, stim_vals, Rs, rng,
     # Values for measures on rotated data
     fa_r_lfi = np.zeros(n_repeats)
     fa_r_sdkl = np.zeros(n_repeats)
+    ks = np.zeros(2, dtype=int)
+    ks[:] = (fac0.k, fac1.k)
 
     for jj in range(n_repeats):
         # Rotation null model
@@ -957,7 +959,7 @@ def inner_calculate_FA_null_measure(X, stimuli, unit_idxs, stim_vals, Rs, rng,
         fa_r_lfi[jj] = lfi(mu0, cov0r, mu1, cov1r, dtheta=dtheta)
         mu1, cov1r = fac1.params(R1)
         fa_r_sdkl[jj] = sdkl(mu0, cov0r, mu1, cov1r, dtheta=dtheta)
-    return fa_r_lfi, fa_r_sdkl, v_lfi, v_sdkl, fa_lfi, fa_sdkl
+    return fa_r_lfi, fa_r_sdkl, v_lfi, v_sdkl, fa_lfi, fa_sdkl, ks
 
 
 def dist_calculate_FA_null_measure_w_rotations(
@@ -1041,6 +1043,7 @@ def dist_calculate_FA_null_measure_w_rotations(
     v_sdkl = np.zeros(my_dimlets)
     fa_lfi = np.zeros(my_dimlets)
     fa_sdkl = np.zeros(my_dimlets)
+    fa_ks = np.zeros((my_dimlets, 2), dtype=int)
     # Iterate over dimlets assigned to this rank
     for ii in range(my_dimlets):
         if rank == 0 and verbose:
@@ -1061,7 +1064,8 @@ def dist_calculate_FA_null_measure_w_rotations(
         # Calculate values under shuffle and rotation null models
         (fa_r_lfi[ii], fa_r_sdkl[ii],
          v_lfi[ii], v_sdkl[ii],
-         fa_lfi[ii], fa_sdkl[ii]) =\
+         fa_lfi[ii], fa_sdkl[ii],
+         ks) =\
             inner_calculate_FA_null_measure(
                 X=X,
                 stimuli=stimuli,
@@ -1079,10 +1083,12 @@ def dist_calculate_FA_null_measure_w_rotations(
     v_sdkl = Gatherv_rows(v_sdkl, comm)
     fa_lfi = Gatherv_rows(fa_lfi, comm)
     fa_sdkl = Gatherv_rows(fa_sdkl, comm)
+    fa_ks = Gatherv_rows(fa_ks, comm)
 
     return (fa_r_lfi, fa_r_sdkl,
             v_lfi, v_sdkl,
             fa_lfi, fa_sdkl,
+            fa_ks,
             all_units, all_stims)
 
 
