@@ -67,6 +67,21 @@ class FACov:
             cov = np.diag(self.private) + shared.T @ shared
         return self.mean.ravel(), cov
 
+    def get_optimal_orientation(self, mu0, mu1):
+        """Calculate the rotation matrix needed for optimal LFI."""
+        # Differential correlation direction
+        fpr = mu1 - mu0
+        fpr /= np.linalg.norm(fpr)
+        # Average covariance is used by LFI
+        cov = self.shared.T @ self.shared
+        # Get smallest eigenvector from covariance
+        w_small = np.linalg.eigh(cov)[1][:, 0]
+        # Get rotation matrix that brings the smallest eigenvector to the
+        # optimal orientation
+        R = get_rotation_for_vectors(w_small, fpr)
+        opt_cov = R @ cov @ R.T + np.diag(self.private)
+        return R, opt_cov
+
 
 def circular_difference(v1, v2, maximum=360):
     """Calculates the circular difference between two vectors, with some
