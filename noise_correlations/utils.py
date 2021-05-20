@@ -40,6 +40,27 @@ def X_stimuli(X, stimuli):
     return n_samples, n_units, n_stimuli, unique_stimuli
 
 
+def get_dimstim_responses(X, stimuli, units, stims):
+    """Subsets the response matrix into two separate matrices, corresponding
+    to the responses for a dimlet of neurons to a pair of stimuli.
+
+    Parameters
+    ----------
+    X : np.ndarray, shape (n_samples, n_units)
+        Neural data design matrix.
+    stimuli : np.ndarray, shape (n_samples,)
+        The stimulus value for each trial.
+    units : np.ndarray, shape (n_units,)
+        The units in the dimlet.
+    stims : np.ndarray, shape (2,)
+        The stimulus values for the stimulus pairing.
+    """
+    stim1, stim2 = stims
+    X1 = X[stimuli == stim1][:, units]
+    X2 = X[stimuli == stim2][:, units]
+    return X1, X2
+
+
 def check_fax(fax=None, n_rows=1, n_cols=1, figsize=(10, 10)):
     """Checks an incoming set of axes, and creates new ones if needed.
 
