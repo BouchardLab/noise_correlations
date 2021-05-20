@@ -72,7 +72,7 @@ class FACov:
         # Differential correlation direction
         fpr = mu1 - mu0
         fpr /= np.linalg.norm(fpr)
-        # Average covariance is used by LFI
+        # FA shared covariance
         cov = self.shared.T @ self.shared
         # Get smallest eigenvector from covariance
         w_small = np.linalg.eigh(cov)[1][:, 0]
@@ -80,7 +80,7 @@ class FACov:
         # optimal orientation
         R = get_rotation_for_vectors(w_small, fpr)
         opt_cov = R @ cov @ R.T + np.diag(self.private)
-        return R, opt_cov
+        return opt_cov
 
 
 def circular_difference(v1, v2, maximum=360):

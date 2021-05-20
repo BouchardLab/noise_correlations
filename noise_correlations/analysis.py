@@ -926,8 +926,13 @@ def inner_calculate_FA_null_measure(X, stimuli, unit_idxs, stim_vals, Rs, rng,
     X0 = X[stim0_idx][:, unit_idxs]
     X1 = X[stim1_idx][:, unit_idxs]
     # Sub-design matrix statistics
+    mu0, cov0 = mean_cov(X0)
+    mu1, cov1 = mean_cov(X1)
     fac0 = FACov(X0, k=k)
     fac1 = FACov(X1, k=k)
+    X01 = np.concatenate([X0 - mu0, X1 - mu1])
+    fac2 = FACov(X01, k=k)
+    opt_cov = fac2.get_optimal_orientation(mu0, mu1)
     # Calculate stimulus difference
     if circular_stim:
         dtheta = np.ediff1d(np.unique(stimuli))[0]
@@ -935,8 +940,6 @@ def inner_calculate_FA_null_measure(X, stimuli, unit_idxs, stim_vals, Rs, rng,
         dtheta = np.diff(stim_vals).item()
 
     # Calculate values of LFI and sDKL for original datasets
-    mu0, cov0 = mean_cov(X0)
-    mu1, cov1 = mean_cov(X1)
     v_lfi = lfi(mu0, cov0, mu1, cov1, dtheta=dtheta)
     v_sdkl = sdkl(mu0, cov0, mu1, cov1)
     mu0, cov0 = fac0.params()
@@ -947,7 +950,7 @@ def inner_calculate_FA_null_measure(X, stimuli, unit_idxs, stim_vals, Rs, rng,
     fa_r_lfi = np.zeros(n_repeats)
     fa_r_sdkl = np.zeros(n_repeats)
     ks = np.zeros(2, dtype=int)
-    ks[:] = (fac0.k, fac1.k)
+    ks[:] = (fac0.k, fac1.k, fac2.k)
 
     for jj in range(n_repeats):
         # Rotation null model
@@ -958,7 +961,7 @@ def inner_calculate_FA_null_measure(X, stimuli, unit_idxs, stim_vals, Rs, rng,
         fa_r_lfi[jj] = lfi(mu0, cov0r, mu1, cov1r, dtheta=dtheta)
         mu1, cov1r = fac1.params(R1)
         fa_r_sdkl[jj] = sdkl(mu0, cov0r, mu1, cov1r)
-    return fa_r_lfi, fa_r_sdkl, v_lfi, v_sdkl, fa_lfi, fa_sdkl, ks
+    return fa_r_lfi, fa_r_sdkl, v_lfi, v_sdkl, fa_lfi, fa_sdkl, opt_cov, ks
 
 
 def dist_calculate_FA_null_measure_w_rotations(
@@ -1042,6 +1045,7 @@ def dist_calculate_FA_null_measure_w_rotations(
     v_sdkl = np.zeros(my_dimlets)
     fa_lfi = np.zeros(my_dimlets)
     fa_sdkl = np.zeros(my_dimlets)
+    opt_covs = np.zeros((my_dimlets, n_dim, n_dim))
     fa_ks = np.zeros((my_dimlets, 2), dtype=int)
     # Iterate over dimlets assigned to this rank
     for ii in range(my_dimlets):
@@ -1064,7 +1068,7 @@ def dist_calculate_FA_null_measure_w_rotations(
         (fa_r_lfi[ii], fa_r_sdkl[ii],
          v_lfi[ii], v_sdkl[ii],
          fa_lfi[ii], fa_sdkl[ii],
-         ks) =\
+         opt_covs[ii], fa_ks[ii]) =\
             inner_calculate_FA_null_measure(
                 X=X,
                 stimuli=stimuli,
@@ -1087,7 +1091,7 @@ def dist_calculate_FA_null_measure_w_rotations(
     return (fa_r_lfi, fa_r_sdkl,
             v_lfi, v_sdkl,
             fa_lfi, fa_sdkl,
-            fa_ks,
+            opt_covs, fa_ks,
             all_units, all_stims)
 
 
