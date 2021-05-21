@@ -1,6 +1,86 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as ss
+from sklearn.decomposition import FactorAnalysis as FA
+import warnings
+
+
+class FACov:
+    def __init__(self, X, k=None):
+        """Class to represent a multivariate covarince parameterized by a
+        Factor Analysis model. Can rotate the shared variability.
+
+        Parameters
+        ----------
+        X : ndarray (samples, units)
+            Neural data.
+        k : int
+            Number of factors to include.
+        """
+        d = X.shape[1]
+        if d < 3:
+            raise ValueError('FA model only works for d > 2.')
+        self.k = k
+        self.mean = X.mean(axis=0, keepdims=True)
+        X = X - self.mean
+        if k is None:
+            kmax = (d - 1) // 2
+            for ki in range(1, kmax + 1):
+                model = FA(n_components=ki, tol=1e-4,
+                           svd_method='lapack', noise_variance_init=np.var(X, axis=0))
+                model0 = FA(n_components=ki, tol=1e-4,
+                            svd_method='lapack')
+                model.fit(X)
+                model0.fit(X)
+                cc = np.corrcoef(model.noise_variance_,
+                                 model0.noise_variance_)[0, 1]
+                if cc < .975:
+                    self.k = ki - 1
+                    break
+                self.k = ki
+            if self.k == 0:
+                warnings.warn("FA model was not well constrained for any `k`,"
+                              " setting `k=1`.", RuntimeWarning)
+            self.k = max(self.k, 1)
+            model = FA(n_components=self.k, tol=1e-4, svd_method='lapack',
+                       noise_variance_init=np.var(X, axis=0))
+            model.fit(X)
+        else:
+            model = FA(n_components=k, tol=1e-4, svd_method='lapack',
+                       noise_variance_init=np.var(X, axis=0))
+        model.fit(X)
+        self.private = model.noise_variance_
+        self.shared = model.components_
+
+    def params(self, R=None):
+        """Return the mean and covariance.
+
+        Parameters
+        ----------
+        R : ndarray
+            Optional rotation matrix.
+        """
+        if R is None:
+            cov = np.diag(self.private) + self.shared.T @ self.shared
+        else:
+            shared = self.shared @ R.T
+            cov = np.diag(self.private) + shared.T @ shared
+        return self.mean.ravel(), cov
+
+    def get_optimal_orientation(self, mu0, mu1):
+        """Calculate the rotation matrix needed for optimal LFI."""
+        # Differential correlation direction
+        fpr = mu1 - mu0
+        fpr /= np.linalg.norm(fpr)
+        # FA shared covariance
+        cov = self.shared.T @ self.shared
+        # Get smallest eigenvector from covariance
+        w_small = np.linalg.eigh(cov)[1][:, 0]
+        # Get rotation matrix that brings the smallest eigenvector to the
+        # optimal orientation
+        R = get_rotation_for_vectors(w_small, fpr)
+        opt_cov = R @ cov @ R.T + np.diag(self.private)
+        return opt_cov
 
 
 def circular_difference(v1, v2, maximum=360):
@@ -553,16 +633,6 @@ def get_rotation_for_vectors(v1, v2):
     S = reflection(np.identity(dim), v1 + v2)
     R = reflection(S, v2)
     return R
-
-
-def get_tuning_preferences_pvc11(pack, transform=None, index=False):
-    X = pack.get_design_matrix(form='cosine2')
-    Y = pack.get_response_matrix(transform=transform)
-    ols = LinearRegression(fit_intercept=True)
-    ols.fit(X, Y)
-    tuning_coefs = ols.coef_
-    _, preferences = pack.get_tuning_modulation_and_preference(tuning_coefs)
-    return preferences
 
 
 def subsample_cov(mus, covs, keep, rng):

@@ -11,7 +11,8 @@ from .null_models import shuffle_data, random_rotation
 from .utils import (mean_cov,
                     get_rotation_for_vectors,
                     uniform_correlation_matrix,
-                    X_stimuli)
+                    X_stimuli,
+                    FACov)
 from .discriminability import (lfi, lfi_data,
                                mv_normal_jeffreys as sdkl,
                                mv_normal_jeffreys_data as sdkl_data)
@@ -360,7 +361,7 @@ def inner_compare_nulls_measures(X, stimuli, unit_idxs, stim_vals, rng, n_repeat
 
 
 def inner_calculate_nulls_measures(
-    X, stimuli, unit_idxs, stim_vals, Rs, rng, circular_stim=False,
+    X, stimuli, unit_idxs, stim_vals, Rs, rng, k, circular_stim=False
 ):
     """Calculates values of metrics on a dimlet of a neural design matrix under
     both the shuffled and rotation null models.
@@ -401,7 +402,13 @@ def inner_calculate_nulls_measures(
     # Sub-design matrix statistics
     mu0, cov0 = mean_cov(X0)
     mu1, cov1 = mean_cov(X1)
-    # Calculate optimal orientation
+    # Fit factor analysis to datasets
+    fac0 = FACov(X0, k=k)
+    fac1 = FACov(X1, k=k)
+    X01 = np.concatenate((X0 - mu0, X1 - mu1), axis=0)
+    fac01 = FACov(X01, k=k)
+    # Calculate optimal orientations
+    opt_fa_cov = fac01.get_optimal_orientation(mu0, mu1)
     _, opt_cov = get_optimal_orientation(mu0, mu1, cov0, cov1)
     # Calculate stimulus difference
     if circular_stim:
@@ -412,12 +419,23 @@ def inner_calculate_nulls_measures(
     # Calculate values of LFI and sDKL for original datasets
     v_lfi = lfi(mu0, cov0, mu1, cov1, dtheta=dtheta)
     v_sdkl = sdkl(mu0, cov0, mu1, cov1, return_trace=False)
+    # Values for measures on factor analysis fits
+    mu0, cov0 = fac0.params()
+    mu1, cov1 = fac1.params()
+    _, cov01 = fac01.params()
+    v_fa_fit_lfi = lfi(mu0, cov01, mu1, cov01, dtheta=dtheta)
+    v_fa_fit_sdkl = sdkl(mu0, cov0, mu1, cov1)
     # Values for measures on shuffled data
     v_s_lfi = np.zeros(n_repeats)
     v_s_sdkl = np.zeros(n_repeats)
     # Values for measures on rotated data
     v_r_lfi = np.zeros(n_repeats)
     v_r_sdkl = np.zeros(n_repeats)
+    # Values for measures on rotated data
+    v_fa_lfi = np.zeros(n_repeats)
+    v_fa_sdkl = np.zeros(n_repeats)
+    fa_ks = np.zeros(3, dtype=int)
+    fa_ks[:] = (fac0.k, fac1.k, fac01.k)
 
     for jj in range(n_repeats):
         # Shuffle null model
@@ -426,14 +444,27 @@ def inner_calculate_nulls_measures(
         v_s_lfi[jj] = lfi_data(X0s, X1s, dtheta=dtheta)
         v_s_sdkl[jj] = sdkl_data(X0s, X1s, return_trace=False)
         # Rotation null model
-        R1 = Rs[jj, 0]
-        R2 = Rs[jj, 1]
-        cov0r = R1 @ cov0 @ R1.T
-        cov1r = R1 @ cov1 @ R1.T
+        R0 = Rs[jj, 0]
+        R1 = Rs[jj, 1]
+        cov0r = R0 @ cov0 @ R0.T
+        cov1r = R0 @ cov1 @ R0.T
         v_r_lfi[jj] = lfi(mu0, cov0r, mu1, cov1r, dtheta=dtheta)
-        cov1r = R2 @ cov1 @ R2.T
+        cov1r = R1 @ cov1 @ R1.T
         v_r_sdkl[jj] = sdkl(mu0, cov0r, mu1, cov1r, return_trace=False)
-    return v_s_lfi, v_s_sdkl, v_r_lfi, v_r_sdkl, v_lfi, v_sdkl, opt_cov
+        # Factor analysis null model: LFI
+        _, cov01r = fac01.params(R0)
+        v_fa_lfi[jj] = lfi(mu0, cov01r, mu1, cov01r, dtheta=dtheta)
+        # Factor analysis null model: sDKL
+        mu0, cov0r = fac0.params(R0)
+        mu1, cov1r = fac1.params(R1)
+        v_fa_sdkl[jj] = sdkl(mu0, cov0r, mu1, cov1r)
+    return (v_lfi, v_sdkl,
+            v_s_lfi, v_s_sdkl,
+            v_r_lfi, v_r_sdkl,
+            v_fa_lfi, v_fa_sdkl,
+            v_fa_fit_lfi, v_fa_fit_sdkl,
+            opt_cov, opt_fa_cov,
+            fa_ks)
 
 
 def compare_nulls_measures(X, stimuli, n_dim, n_dimlets, rng, n_repeats=10000,
@@ -726,12 +757,12 @@ def dist_calculate_nulls_measures(
 
     # allocate storage for this rank's p-values
     my_dimlets = units.shape[0]
+    v_lfi = np.zeros(my_dimlets)
+    v_sdkl = np.zeros(my_dimlets)
     v_s_lfi = np.zeros((my_dimlets, n_repeats))
     v_s_sdkl = np.zeros_like(v_s_lfi)
     v_r_lfi = np.zeros_like(v_s_lfi)
     v_r_sdkl = np.zeros_like(v_s_lfi)
-    v_lfi = np.zeros(my_dimlets)
-    v_sdkl = np.zeros(my_dimlets)
 
     for ii in range(my_dimlets):
         if rank == 0 and verbose:
@@ -760,7 +791,8 @@ def dist_calculate_nulls_measures(
 
 def dist_calculate_nulls_measures_w_rotations(
     X, stimuli, n_dim, n_dimlets, Rs, R_idxs, rng, comm, circular_stim=False,
-    all_stim=True, unordered=False, n_stims_per_dimlet=None, verbose=False
+    all_stim=True, unordered=False, n_stims_per_dimlet=None, verbose=False,
+    k=None
 ):
     """Calculates null model distributions for linear Fisher information and
     symmetric KL-divergence, in a distributed manner.
@@ -835,13 +867,20 @@ def dist_calculate_nulls_measures_w_rotations(
 
     # Allocate storage for this rank's p-values
     my_dimlets = units.shape[0]
+    v_lfi = np.zeros(my_dimlets)
+    v_sdkl = np.zeros(my_dimlets)
     v_s_lfi = np.zeros((my_dimlets, n_repeats))
     v_s_sdkl = np.zeros_like(v_s_lfi)
     v_r_lfi = np.zeros_like(v_s_lfi)
     v_r_sdkl = np.zeros_like(v_s_lfi)
-    v_lfi = np.zeros(my_dimlets)
-    v_sdkl = np.zeros(my_dimlets)
+    v_fa_lfi = np.zeros_like(v_s_lfi)
+    v_fa_sdkl = np.zeros_like(v_s_lfi)
+    v_fa_fit_lfi = np.zeros(my_dimlets)
+    v_fa_fit_sdkl = np.zeros(my_dimlets)
     opt_covs = np.zeros((my_dimlets, n_dim, n_dim))
+    opt_fa_covs = np.zeros((my_dimlets, n_dim, n_dim))
+    fa_ks = np.zeros((my_dimlets, 3), dtype=int)
+
     # Iterate over dimlets assigned to this rank
     for ii in range(my_dimlets):
         if rank == 0 and verbose:
@@ -860,10 +899,13 @@ def dist_calculate_nulls_measures_w_rotations(
                 R = R.reshape(R_idx.shape + (n_dim, n_dim))
 
         # Calculate values under shuffle and rotation null models
-        (v_s_lfi[ii], v_s_sdkl[ii],
+        (v_lfi[ii], v_sdkl[ii],
+         v_s_lfi[ii], v_s_sdkl[ii],
          v_r_lfi[ii], v_r_sdkl[ii],
-         v_lfi[ii], v_sdkl[ii],
-         opt_covs[ii]) = \
+         v_fa_lfi[ii], v_fa_sdkl[ii],
+         v_fa_fit_lfi[ii], v_fa_fit_sdkl[ii],
+         opt_covs[ii], opt_fa_covs[ii],
+         fa_ks[ii]) = \
             inner_calculate_nulls_measures(
                 X=X,
                 stimuli=stimuli,
@@ -871,22 +913,32 @@ def dist_calculate_nulls_measures_w_rotations(
                 stim_vals=stim_vals,
                 Rs=R,
                 rng=rng,
-                circular_stim=circular_stim)
+                circular_stim=circular_stim,
+                k=k)
 
     # Gather measures across ranks
+    v_lfi = Gatherv_rows(v_lfi, comm)
+    v_sdkl = Gatherv_rows(v_sdkl, comm)
     v_s_lfi = Gatherv_rows(v_s_lfi, comm)
     v_s_sdkl = Gatherv_rows(v_s_sdkl, comm)
     v_r_lfi = Gatherv_rows(v_r_lfi, comm)
     v_r_sdkl = Gatherv_rows(v_r_sdkl, comm)
-    v_lfi = Gatherv_rows(v_lfi, comm)
-    v_sdkl = Gatherv_rows(v_sdkl, comm)
+    v_fa_lfi = Gatherv_rows(v_fa_lfi, comm)
+    v_fa_sdkl = Gatherv_rows(v_fa_sdkl, comm)
+    v_fa_fit_lfi = Gatherv_rows(v_fa_fit_lfi, comm)
+    v_fa_fit_sdkl = Gatherv_rows(v_fa_fit_sdkl, comm)
     opt_covs = Gatherv_rows(opt_covs, comm)
+    opt_fa_covs = Gatherv_rows(opt_fa_covs, comm)
+    fa_ks = Gatherv_rows(fa_ks, comm)
 
-    return (v_s_lfi, v_s_sdkl,
+    return (v_lfi, v_sdkl,
+            v_s_lfi, v_s_sdkl,
             v_r_lfi, v_r_sdkl,
-            v_lfi, v_sdkl,
-            all_units, all_stims,
-            opt_covs)
+            v_fa_lfi, v_fa_sdkl,
+            v_fa_fit_lfi, v_fa_fit_sdkl,
+            opt_covs, opt_fa_covs,
+            all_stims, all_units,
+            fa_ks)
 
 
 def dist_compare_dtheta(X, dim, n_dimlets, rng, comm, n_samples=10000,

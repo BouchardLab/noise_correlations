@@ -10,7 +10,7 @@ import time
 
 from mpi4py import MPI
 from mpi_utils.ndarray import Bcast_from_root
-from noise_correlations.analysis import dist_calculate_nulls_measures_w_rotations
+from noise_correlations.analysis import dist_calculate_FA_null_measure_w_rotations
 from noise_correlations import utils
 
 
@@ -26,9 +26,8 @@ def main(args):
     # Which neural dataset to use
     dataset = args.dataset
     # Dimlet dimensions
-    dim_min = args.dim_min
     dim_max = args.dim_max
-    dims = np.arange(dim_min, dim_max + 1)
+    dims = np.arange(3, dim_max + 1)
     n_dims = dims.size
     # Number of dimlets per dimension
     n_dimlets = args.n_dimlets
@@ -49,6 +48,7 @@ def main(args):
         print('--------------------------------------------------------------')
         print('>>> Beginning Job...')
         print(f'{size} processes running, this is rank {rank}.')
+        print('Factor analysis null model.')
         print(f'Running on dataset {dataset}, up to {dim_max} dimensions.')
         print(f'Using {n_dimlets} dimlets per dimension, and {n_repeats} repeats per dimlet.')
         print('--------------------------------------------------------------')
@@ -150,8 +150,6 @@ def main(args):
             save_name = save_tag + '_' + save_name
         save_name = os.path.join(save_folder, save_name)
         with h5py.File(save_name, 'w') as results:
-            opt_covs_group = results.create_group('opt_covs')
-            opt_fa_covs_group = results.create_group('opt_fa_covs')
             # Observed measures in neural data
             results['v_lfi'] = np.zeros((n_dims, n_dim_stims))
             results['v_sdkl'] = np.zeros((n_dims, n_dim_stims))
@@ -160,21 +158,14 @@ def main(args):
             results['v_s_sdkl'] = np.zeros((n_dims, n_dim_stims, n_repeats))
             results['v_r_lfi'] = np.zeros((n_dims, n_dim_stims, n_repeats))
             results['v_r_sdkl'] = np.zeros((n_dims, n_dim_stims, n_repeats))
-            results['v_fa_lfi'] = np.zeros((n_dims, n_dim_stims, n_repeats))
-            results['v_fa_sdkl'] = np.zeros((n_dims, n_dim_stims, n_repeats))
-            results['v_fa_fit_lfi'] = np.zeros((n_dims, n_dim_stims))
-            results['v_fa_fit_sdkl'] = np.zeros((n_dims, n_dim_stims))
             # Percentiles of measures
             results['p_s_lfi'] = np.zeros((n_dims, n_dim_stims))
             results['p_s_sdkl'] = np.zeros((n_dims, n_dim_stims))
             results['p_r_lfi'] = np.zeros((n_dims, n_dim_stims))
             results['p_r_sdkl'] = np.zeros((n_dims, n_dim_stims))
-            results['p_fa_lfi'] = np.zeros((n_dims, n_dim_stims))
-            results['p_fa_sdkl'] = np.zeros((n_dims, n_dim_stims))
             # Rotation indices
             results['R_idxs'] = R_idxs
             # Dim-stim storage
-            results['fa_ks'] = np.zeros((n_dims, n_dim_stims, 3), dtype=int)
             results['units'] = np.zeros((n_dims, n_dim_stims, np.max(dims)), dtype=int)
             results['stims'] = np.zeros((n_dims, n_dim_stims, 2))
     R_idxs = Bcast_from_root(R_idxs, comm)
@@ -183,14 +174,10 @@ def main(args):
         if rank == 0:
             print(f'>>> Dimension {n_dim}')
         # Perform distributed evaluation across null measures
-        (v_lfi_temp, v_sdkl_temp,
-         v_s_lfi_temp, v_s_sdkl_temp,
-         v_r_lfi_temp, v_r_sdkl_temp,
+        (v_r_lfi_temp, v_r_sdkl_temp,
+         v_lfi_temp, v_sdkl_temp,
          v_fa_lfi_temp, v_fa_sdkl_temp,
-         v_fa_fit_lfi_temp, v_fa_fit_sdkl_temp,
-         opt_covs_temp, opt_fa_covs_temp,
-         stims_temp, units_temp,
-         fa_ks_temp) = dist_calculate_nulls_measures_w_rotations(
+         units_temp, stims_temp) = dist_calculate_FA_null_measure_w_rotations(
             X=X,
             stimuli=stimuli,
             n_dim=n_dim,
@@ -210,39 +197,12 @@ def main(args):
             with h5py.File(save_name, 'a') as results:
                 results['v_lfi'][idx] = v_lfi_temp
                 results['v_sdkl'][idx] = v_sdkl_temp
-                results['v_s_lfi'][idx] = v_s_lfi_temp
-                results['v_s_sdkl'][idx] = v_s_sdkl_temp
                 results['v_r_lfi'][idx] = v_r_lfi_temp
                 results['v_r_sdkl'][idx] = v_r_sdkl_temp
-                results['v_fa_lfi'][idx] = v_fa_lfi_temp
-                results['v_fa_sdkl'][idx] = v_fa_sdkl_temp
-                results['v_fa_fit_lfi'][idx] = v_fa_fit_lfi_temp
-                results['v_fa_fit_sdkl'][idx] = v_fa_fit_sdkl_temp
-                results['p_s_lfi'][idx] = np.mean(
-                    v_lfi_temp[..., np.newaxis] > v_s_lfi_temp, axis=-1
-                )
-                results['p_r_lfi'][idx] = np.mean(
-                    v_lfi_temp[..., np.newaxis] > v_r_lfi_temp, axis=-1
-                )
-                results['p_fa_lfi'][idx] = np.mean(
-                    v_lfi_temp[..., np.newaxis] > v_fa_lfi_temp, axis=-1
-                )
-                results['p_s_sdkl'][idx] = np.mean(
-                    v_sdkl_temp[..., np.newaxis] > v_s_sdkl_temp, axis=-1
-                )
-                results['p_r_sdkl'][idx] = np.mean(
-                    v_sdkl_temp[..., np.newaxis] > v_r_sdkl_temp, axis=-1
-                )
-                results['p_fa_sdkl'][idx] = np.mean(
-                    v_sdkl_temp[..., np.newaxis] > v_fa_sdkl_temp, axis=-1
-                )
                 results['units'][idx, :, :n_dim] = units_temp
                 results['stims'][idx] = stims_temp
-                results['fa_ks'][idx] = fa_ks_temp
-                opt_covs_group = results['opt_covs']
-                opt_covs_group[str(n_dim)] = opt_covs_temp
-                opt_fa_covs_group = results['opt_fa_covs']
-                opt_fa_covs_group[str(n_dim)] = opt_fa_covs_temp
+                # opt_covs_group = results['opt_covs']
+                # opt_covs_group[str(n_dim)] = opt_covs_temp
 
             print(f'Loop took {time.time() - t1} seconds.')
 
@@ -266,7 +226,6 @@ if __name__ == '__main__':
     parser.add_argument('--save_folder', default='', type=str)
     parser.add_argument('--save_tag', type=str, default='')
     parser.add_argument('--dataset', choices=['pvc11', 'ret2', 'ac1', 'cv'])
-    parser.add_argument('--dim_min', type=int, default=2)
     parser.add_argument('--dim_max', type=int)
     parser.add_argument('--n_dimlets', '-n', type=int, default=1000)
     parser.add_argument('--n_repeats', '-s', type=int, default=1000)
