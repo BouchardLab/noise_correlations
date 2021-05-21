@@ -26,27 +26,27 @@ class FACov:
         if k is None:
             kmax = (d - 1) // 2
             for ki in range(1, kmax + 1):
-                model = FA(n_components=ki, tol=1e-8, max_iter=10000,
+                model = FA(n_components=ki, tol=1e-4,
                            svd_method='lapack', noise_variance_init=np.var(X, axis=0))
-                model0 = FA(n_components=ki, tol=1e-8, max_iter=10000,
+                model0 = FA(n_components=ki, tol=1e-4,
                             svd_method='lapack')
                 model.fit(X)
                 model0.fit(X)
                 cc = np.corrcoef(model.noise_variance_,
                                  model0.noise_variance_)[0, 1]
-                if cc < .95:
+                if cc < .975:
                     self.k = ki - 1
                     break
                 self.k = ki
             if self.k == 0:
                 warnings.warn("FA model was not well constrained for any `k`,"
-                              + " setting `k=1`.", RuntimeWarning)
+                              " setting `k=1`.", RuntimeWarning)
             self.k = max(self.k, 1)
-            model = FA(n_components=self.k, tol=1e-8, svd_method='lapack',
+            model = FA(n_components=self.k, tol=1e-4, svd_method='lapack',
                        noise_variance_init=np.var(X, axis=0))
             model.fit(X)
         else:
-            model = FA(n_components=k, tol=1e-8, svd_method='lapack',
+            model = FA(n_components=k, tol=1e-4, svd_method='lapack',
                        noise_variance_init=np.var(X, axis=0))
         model.fit(X)
         self.private = model.noise_variance_
