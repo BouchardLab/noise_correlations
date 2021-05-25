@@ -5,7 +5,7 @@ from sklearn.discriminant_analysis import (QuadraticDiscriminantAnalysis as QDA,
 from sklearn.metrics import log_loss
 import torch
 
-from .utils import mean_cov
+from .utils import mean_cov, _lfi
 
 
 def mv_normal_kl(mu0, cov0, mu1, cov1, return_trace=False):
@@ -261,7 +261,7 @@ def lfi(mu0, cov0, mu1, cov1, dtheta=1.):
     cov = (cov0 + cov1) / 2.
 
     if use_torch:
-        return dmu_dtheta.mm(torch.linalg.solve(cov, dmu_dtheta.t()))
+        return _lfi(mu0, mu1, cov, dtheta)
     else:
         try:
             return dmu_dtheta.dot(np.linalg.pinv(cov).dot(dmu_dtheta.T))

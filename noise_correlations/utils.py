@@ -7,9 +7,9 @@ import warnings
 import torch
 
 
-def lfi(mu0, mu1, cov, dtheta=1.):
+def _lfi(mu0, mu1, cov, dtheta=1.):
     """Calculate the linear Fisher information from two data matrices.
-    Pytorch version copied here.
+    Pytorch version.
 
     Parameters
     ----------
