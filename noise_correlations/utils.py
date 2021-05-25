@@ -36,7 +36,8 @@ class FACov:
         X : ndarray (samples, units)
             Neural data.
         k : int
-            Number of factors to include.
+            Number of factors to include. If `None`, a heuristic will be used to
+            chose the largest `k` such that the model is identifiable.
         """
         d = X.shape[1]
         if d < 3:
@@ -80,6 +81,9 @@ class FACov:
         ----------
         R : ndarray
             Optional rotation matrix.
+        Returns
+        -------
+        mean, cov
         """
         if R is None:
             cov = np.diag(self.private) + self.shared.T @ self.shared
@@ -89,6 +93,18 @@ class FACov:
         return self.mean.ravel(), cov
 
     def get_optimal_orientation(self, mu0, mu1):
+        """Calculate the optimal cov by rotating the shared variability in the
+        FA model.
+
+        Parameters
+        ----------
+        mu0 : ndarray (dim,)
+        mu1 : ndarray (dim,)
+
+        Returns
+        -------
+        cov
+        """
         def make_cov(paramst, shared, private):
             dim = shared.shape[1]
             At = paramst.reshape(dim, dim)
@@ -100,7 +116,7 @@ class FACov:
         def f_df(params, shared, private, mu0, mu1):
             paramst = torch.tensor(params, requires_grad=True)
             cov = make_cov(paramst, shared, private)
-            loss = -lfi(mu0[np.newaxis], mu1[np.newaxis], cov)
+            loss = -_lfi(mu0[np.newaxis], mu1[np.newaxis], cov)
             loss.backward()
             loss = loss.detach().numpy()
             grad = paramst.grad.detach().numpy()
