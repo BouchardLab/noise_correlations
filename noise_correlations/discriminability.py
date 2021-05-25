@@ -261,7 +261,7 @@ def lfi(mu0, cov0, mu1, cov1, dtheta=1.):
     cov = (cov0 + cov1) / 2.
 
     if use_torch:
-        return dmu_dtheta.mm(torch.solve(cov, dmu_dtheta.t()))
+        return dmu_dtheta.mm(torch.linalg.solve(cov, dmu_dtheta.t()))
     else:
         try:
             return dmu_dtheta.dot(np.linalg.pinv(cov).dot(dmu_dtheta.T))
