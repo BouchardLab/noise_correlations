@@ -5,7 +5,7 @@ from sklearn.discriminant_analysis import (QuadraticDiscriminantAnalysis as QDA,
 from sklearn.metrics import log_loss
 import torch
 
-from .utils import mean_cov
+from .utils import mean_cov, _lfi
 
 
 def mv_normal_kl(mu0, cov0, mu1, cov1, return_trace=False):
@@ -23,19 +23,11 @@ def mv_normal_kl(mu0, cov0, mu1, cov1, return_trace=False):
     -------
     KL Divergence
     """
-    use_torch = any([isinstance(item, torch.Tensor)
-                     for item in [mu0, cov0, mu1, cov1]])
     mean_diff = mu1 - mu0
-    if use_torch:
-        d = torch.prod(mu1.size)
-        tr = torch.trace(torch.solve(cov1, cov0)[0])
-        means = mean_diff.mm(torch.solve(cov1, mean_diff)[0])
-        logdets = torch.slogdet(cov1)[1] - torch.slogdet(cov0)
-    else:
-        d = mu1.size
-        tr = np.trace(np.linalg.solve(cov1, cov0))
-        means = mean_diff.dot(np.linalg.solve(cov1, mean_diff))
-        logdets = np.linalg.slogdet(cov1)[1] - np.linalg.slogdet(cov0)[1]
+    d = mu1.size
+    tr = np.trace(np.linalg.solve(cov1, cov0))
+    means = mean_diff @ np.linalg.solve(cov1, mean_diff.T)
+    logdets = np.linalg.slogdet(cov1)[1] - np.linalg.slogdet(cov0)[1]
     kl = .5 * (tr + means + logdets - d)
     if return_trace:
         return kl, tr
@@ -261,12 +253,9 @@ def lfi(mu0, cov0, mu1, cov1, dtheta=1.):
     cov = (cov0 + cov1) / 2.
 
     if use_torch:
-        return dmu_dtheta.mm(torch.solve(cov, dmu_dtheta.t()))
+        return _lfi(mu0, mu1, cov, dtheta)
     else:
-        try:
-            return dmu_dtheta.dot(np.linalg.pinv(cov).dot(dmu_dtheta.T))
-        except np.linalg.LinAlgError:
-            return dmu_dtheta @ np.linalg.solve(cov, dmu_dtheta.T)
+        return dmu_dtheta @ np.linalg.lstsq(cov, dmu_dtheta.T, rcond=None)[0]
 
 
 def lfi_data(x0, x1, dtheta=1.):

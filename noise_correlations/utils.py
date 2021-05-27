@@ -1,8 +1,29 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as ss
+from scipy.optimize import minimize
 from sklearn.decomposition import FactorAnalysis as FA
 import warnings
+import torch
+
+
+def _lfi(mu0, mu1, cov, dtheta=1.):
+    """Calculate the linear Fisher information from two data matrices.
+    Pytorch version should always have full rank cov.
+
+    Parameters
+    ----------
+    x0 : ndarray (samples, dim)
+    x1 : ndarray (samples, dim)
+    dtheta : float
+        Change in stimulus between x0 and x1.
+
+    Returns
+    -------
+    Linear Fisher information
+    """
+    dmu_dtheta = (mu1 - mu0) / dtheta
+    return dmu_dtheta.mm(torch.linalg.solve(cov, dmu_dtheta.t()))
 
 
 class FACov:
@@ -15,7 +36,8 @@ class FACov:
         X : ndarray (samples, units)
             Neural data.
         k : int
-            Number of factors to include.
+            Number of factors to include. If `None`, a heuristic will be used to
+            chose the largest `k` such that the model is identifiable.
         """
         d = X.shape[1]
         if d < 3:
@@ -59,6 +81,9 @@ class FACov:
         ----------
         R : ndarray
             Optional rotation matrix.
+        Returns
+        -------
+        mean, cov
         """
         if R is None:
             cov = np.diag(self.private) + self.shared.T @ self.shared
@@ -68,18 +93,43 @@ class FACov:
         return self.mean.ravel(), cov
 
     def get_optimal_orientation(self, mu0, mu1):
-        """Calculate the rotation matrix needed for optimal LFI."""
-        # Differential correlation direction
-        fpr = mu1 - mu0
-        fpr /= np.linalg.norm(fpr)
-        # FA shared covariance
-        cov = self.shared.T @ self.shared
-        # Get smallest eigenvector from covariance
-        w_small = np.linalg.eigh(cov)[1][:, 0]
-        # Get rotation matrix that brings the smallest eigenvector to the
-        # optimal orientation
-        R = get_rotation_for_vectors(w_small, fpr)
-        opt_cov = R @ cov @ R.T + np.diag(self.private)
+        """Calculate the optimal cov by rotating the shared variability in the
+        FA model.
+
+        Parameters
+        ----------
+        mu0 : ndarray (dim,)
+        mu1 : ndarray (dim,)
+
+        Returns
+        -------
+        cov
+        """
+        def make_cov(paramst, shared, private):
+            dim = shared.shape[1]
+            At = paramst.reshape(dim, dim)
+            At = (At - At.t()) / 2.
+            R = torch.matrix_exp(At)
+            cov = torch.chain_matmul(R, shared.t(), shared, R.t()) + private
+            return cov
+
+        def f_df(params, shared, private, mu0, mu1):
+            paramst = torch.tensor(params, requires_grad=True)
+            cov = make_cov(paramst, shared, private)
+            loss = -_lfi(mu0[np.newaxis], mu1[np.newaxis], cov)
+            loss.backward()
+            loss = loss.detach().numpy()
+            grad = paramst.grad.detach().numpy()
+            return loss, grad
+
+        dim = self.shared.shape[1]
+        shared = torch.tensor(self.shared)
+        private = torch.tensor(np.diag(self.private))
+        args = shared, private, torch.tensor(mu0), torch.tensor(mu1)
+        x0 = np.zeros(dim**2)
+        x = minimize(f_df, x0, method='L-BFGS-B', jac=True, args=args).x
+        paramst = torch.tensor(x)
+        opt_cov = make_cov(paramst, shared, private).numpy()
         return opt_cov
 
 
