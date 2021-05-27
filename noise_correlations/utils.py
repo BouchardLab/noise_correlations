@@ -9,7 +9,7 @@ import torch
 
 def _lfi(mu0, mu1, cov, dtheta=1.):
     """Calculate the linear Fisher information from two data matrices.
-    Pytorch version.
+    Pytorch version should always have full rank cov.
 
     Parameters
     ----------
