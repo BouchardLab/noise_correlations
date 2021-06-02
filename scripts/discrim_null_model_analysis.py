@@ -100,6 +100,21 @@ def main(args):
             unique_stimuli = np.unique(stimuli)
             stimuli = np.array([np.argwhere(unique_stimuli == stim).item()
                                for stim in stimuli])
+    elif dataset == 'ecog':
+        circular_stim = False
+        unordered = False
+        all_stim = False
+        if rank == 0:
+            pack = packs.ECOG(data_path=data_path)
+            X = pack.get_response_matrix(bounds=[40, 60],
+                                         band='HG',
+                                         amps=[4, 5, 6],
+                                         electrodes=pack.pac_idxs)
+            stimuli = pack.get_design_matrix(form='frequency')
+            amplitudes = pack.get_design_matrix(form='amplitude')
+            stimuli = stimuli[np.isin(amplitudes, [5, 6, 7])]
+            unique_stimuli = np.unique(stimuli)
+
     else:
         raise ValueError('Dataset not available.')
 
@@ -265,7 +280,7 @@ if __name__ == '__main__':
     parser.add_argument('--rotation_path', type=str)
     parser.add_argument('--save_folder', default='', type=str)
     parser.add_argument('--save_tag', type=str, default='')
-    parser.add_argument('--dataset', choices=['pvc11', 'ret2', 'ac1', 'cv'])
+    parser.add_argument('--dataset', choices=['pvc11', 'ret2', 'ac1', 'cv', 'ecog'])
     parser.add_argument('--dim_min', type=int, default=2)
     parser.add_argument('--dim_max', type=int)
     parser.add_argument('--n_dimlets', '-n', type=int, default=1000)
