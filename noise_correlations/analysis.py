@@ -361,7 +361,8 @@ def inner_compare_nulls_measures(X, stimuli, unit_idxs, stim_vals, rng, n_repeat
 
 
 def inner_calculate_nulls_measures(
-    X, stimuli, unit_idxs, stim_vals, Rs, rng, k, circular_stim=False
+    X, stimuli, unit_idxs, stim_vals, Rs, rng, k, circular_stim=False,
+    stim_transform=None
 ):
     """Calculates values of metrics on a dimlet of a neural design matrix under
     both the shuffled and rotation null models.
@@ -413,6 +414,8 @@ def inner_calculate_nulls_measures(
     # Calculate stimulus difference
     if circular_stim:
         dtheta = np.ediff1d(np.unique(stimuli))[0]
+    elif stim_transform == 'log':
+        dtheta = np.diff(np.log(stim_vals)).item()
     else:
         dtheta = np.diff(stim_vals).item()
 
@@ -792,7 +795,7 @@ def dist_calculate_nulls_measures(
 def dist_calculate_nulls_measures_w_rotations(
     X, stimuli, n_dim, n_dimlets, Rs, R_idxs, rng, comm, circular_stim=False,
     all_stim=True, unordered=False, n_stims_per_dimlet=None, verbose=False,
-    k=None
+    stim_transform=None, k=None
 ):
     """Calculates null model distributions for linear Fisher information and
     symmetric KL-divergence, in a distributed manner.
@@ -914,6 +917,7 @@ def dist_calculate_nulls_measures_w_rotations(
                 Rs=R,
                 rng=rng,
                 circular_stim=circular_stim,
+                stim_transform=stim_transform,
                 k=k)
 
     # Gather measures across ranks

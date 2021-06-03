@@ -61,6 +61,7 @@ def main(args):
     if dataset == 'pvc11':
         circular_stim = True
         unordered = False
+        stim_transform = None
         if rank == 0:
             pack = packs.PVC11(data_path=data_path)
             # Get design matrix and stimuli
@@ -82,6 +83,7 @@ def main(args):
     elif dataset == 'ret2':
         circular_stim = True
         unordered = False
+        stim_transform = None
         if rank == 0:
             pack = packs.RET2(data_path=data_path)
             # get design matrix and stimuli
@@ -104,6 +106,7 @@ def main(args):
         circular_stim = False
         unordered = False
         all_stim = False
+        stim_transform = 'log'
         if rank == 0:
             pack = packs.ECOG(data_path=data_path)
             X = pack.get_response_matrix(bounds=[40, 60],
@@ -219,6 +222,7 @@ def main(args):
             unordered=unordered,
             n_stims_per_dimlet=args.n_stims_per_dimlet,
             verbose=args.inner_loop_verbose,
+            stim_transform=stim_transform,
             k=None)
 
         if rank == 0:
