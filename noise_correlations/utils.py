@@ -170,27 +170,6 @@ def X_stimuli(X, stimuli):
     return n_samples, n_units, n_stimuli, unique_stimuli
 
 
-def get_dimstim_responses(X, stimuli, units, stims):
-    """Subsets the response matrix into two separate matrices, corresponding
-    to the responses for a dimlet of neurons to a pair of stimuli.
-
-    Parameters
-    ----------
-    X : np.ndarray, shape (n_samples, n_units)
-        Neural data design matrix.
-    stimuli : np.ndarray, shape (n_samples,)
-        The stimulus value for each trial.
-    units : np.ndarray, shape (n_units,)
-        The units in the dimlet.
-    stims : np.ndarray, shape (2,)
-        The stimulus values for the stimulus pairing.
-    """
-    stim1, stim2 = stims
-    X1 = X[stimuli == stim1][:, units]
-    X2 = X[stimuli == stim2][:, units]
-    return X1, X2
-
-
 def check_fax(fax=None, n_rows=1, n_cols=1, figsize=(10, 10)):
     """Checks an incoming set of axes, and creates new ones if needed.
 
@@ -700,3 +679,87 @@ def subsample_cov(mus, covs, keep, rng):
     else:
         covs = covs[idxs][:, idxs]
     return mus, covs
+
+
+def cov2corr(cov):
+    """Convert a covariance matrix to a correlation matrix.
+
+    Parameters
+    ----------
+    cov : np.ndarray, shape (n_units, n_units)
+        The covariance matrix.
+
+    Returns
+    -------
+    corr : np.ndarray, shape (n_units, n_units)
+        The correlation matrix.
+    """
+    stdevs = np.sqrt(np.diag(cov))
+    outer = np.outer(stdevs, stdevs)
+    corr = cov / outer
+    return corr
+
+
+def corr2cov(corr, var):
+    """Converts a correlation matrix to a covariance matrix, given a set of
+    variances.
+
+    Parameters
+    ----------
+    corr : np.ndarray, shape (n_units, n_units)
+        The correlation matrix.
+    var : np.ndarray, shape (n_units,)
+        A vector of variances for the units in the correlation matrix.
+
+    Returns
+    -------
+    cov : np.ndarray, shape (n_units, n_units)
+        The covariance matrix.
+    """
+    stdevs = np.sqrt(var)
+    outer = np.outer(stdevs, stdevs)
+    cov = corr * outer
+    return cov
+
+
+def get_dimstim_responses(X, stimuli, units, stims):
+    """Subsets the response matrix into two separate matrices, corresponding
+    to the responses for a dimlet of neurons to a pair of stimuli.
+
+    Parameters
+    ----------
+    X : np.ndarray, shape (n_samples, n_units)
+        Neural data design matrix.
+    stimuli : np.ndarray, shape (n_samples,)
+        The stimulus value for each trial.
+    units : np.ndarray, shape (n_units,)
+        The units in the dimlet.
+    stims : np.ndarray, shape (2,)
+        The stimulus values for the stimulus pairing.
+    """
+    stim1, stim2 = stims
+    X1 = X[stimuli == stim1][:, units]
+    X2 = X[stimuli == stim2][:, units]
+    return X1, X2
+
+
+def get_dimstim_responses_from_h5(h5, dim_idx, dimstim_idx):
+    # Obtain all data
+    X = h5['X'][:]
+    stimuli = h5['stimuli'][:]
+    # Base dimension is the number of units in the smallest dimlet of this
+    # experiment
+    base_dim = np.max(np.argwhere(h5['units'][0, 0] != 0).ravel()) + 1
+    # Read in the dimlet and dimstim
+    dimlet = h5['units'][dim_idx, dimstim_idx, :dim_idx + base_dim].astype('int')
+    stims = h5['stims'][dim_idx, dimstim_idx]
+    # Get separate design matrices
+    X1, X2 = get_dimstim_responses(X, stimuli, dimlet, stims)
+    return X1, X2
+
+
+def read_avg_cov(h5, dim_idx, dimstim_idx):
+    # Get dimstim responses
+    X1, X2 = get_dimstim_responses_from_h5(h5, dim_idx, dimstim_idx)
+    avg_cov = 0.5 * (np.cov(X1.T) + np.cov(X2.T))
+    return avg_cov
