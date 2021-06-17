@@ -3,6 +3,7 @@ import numpy as np
 import warnings
 
 from scipy.special import comb
+from scipy.stats import norm
 from scipy.stats import spearmanr as sr
 from scipy.stats import special_ortho_group as sog
 from itertools import combinations
@@ -1302,3 +1303,55 @@ def calculate_fano_factors_and_ncs(results, verbose=True):
         opt_fa_ncs.append(opt_fa_nc)
         obs_ncs.append(obs_nc)
     return opt_r_ffs, opt_fa_ffs, obs_ffs, opt_r_ncs, opt_fa_ncs, obs_ncs
+
+
+def percentile_experiment(results, percentile=1, verbose=True):
+    all_null_equiv_cdfs = []
+    all_opt_fa_equiv_cdfs = []
+    all_opt_equiv_cdfs = []
+
+    for result in results:
+        if verbose:
+            print(result)
+        n_dims, n_dimstims = result['stims'].shape[:2]
+        null_equiv_cdfs = {}
+        opt_fa_equiv_cdfs = {}
+        opt_equiv_cdfs = {}
+
+        for dim_idx in range(n_dims):
+            dim = dim_idx + 3
+            null_equiv_cdf = np.zeros((n_dimstims, dim))
+            opt_fa_equiv_cdf = np.zeros_like(null_equiv_cdf)
+            opt_equiv_cdf = np.zeros_like(null_equiv_cdf)
+
+            for dimstim_idx in range(n_dimstims):
+                X1, X2 = get_dimstim_responses_from_h5(result, dim_idx, dimstim_idx)
+                # Get means
+                mu1 = np.mean(X1, axis=0, keepdims=True)
+                mu2 = np.mean(X2, axis=0, keepdims=True)
+                # Center the data and concatenate
+                X1 = X1 - mu1
+                X2 = X2 - mu2
+                X12 = np.concatenate((X1, X2), axis=0)
+                # Obtain value at the chosen percentile
+                X12_percentiles = np.percentile(X12, q=percentile, axis=0)
+                # Obtain variances for concatenated data
+                obs_scales = np.std(X12, axis=0)
+                opt_fa_scales = np.diag(result[f'opt_fa_covs/{dim}'][dimstim_idx])
+                opt_scales = np.diag(result[f'opt_covs/{dim}'][dimstim_idx])
+                # Create random variables
+                obs_rv = norm(scale=obs_scales)
+                opt_fa_rv = norm(scale=opt_fa_scales)
+                opt_rv = norm(scale=opt_scales)
+                # Calculate equivalent CDFs
+                null_equiv_cdf[dimstim_idx] = obs_rv.cdf(X12_percentiles)
+                opt_fa_equiv_cdf[dimstim_idx] = opt_fa_rv.cdf(X12_percentiles)
+                opt_equiv_cdf[dimstim_idx] = opt_rv.cdf(X12_percentiles)
+
+            null_equiv_cdfs[dim] = null_equiv_cdf
+            opt_fa_equiv_cdfs[dim] = opt_fa_equiv_cdf
+            opt_equiv_cdfs[dim] = opt_equiv_cdf
+        all_null_equiv_cdfs.append(null_equiv_cdfs)
+        all_opt_fa_equiv_cdfs.append(opt_fa_equiv_cdfs)
+        all_opt_equiv_cdfs.append(opt_equiv_cdfs)
+    return all_null_equiv_cdfs, all_opt_fa_equiv_cdfs, all_opt_equiv_cdfs
