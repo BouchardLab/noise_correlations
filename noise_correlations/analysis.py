@@ -1335,10 +1335,10 @@ def percentile_experiment(results, percentile=1, verbose=True):
                 X12 = np.concatenate((X1, X2), axis=0)
                 # Obtain value at the chosen percentile
                 X12_percentiles = np.percentile(X12, q=percentile, axis=0)
-                # Obtain variances for concatenated data
+                # Obtain standard deviations for concatenated data
                 obs_scales = np.std(X12, axis=0)
-                opt_fa_scales = np.diag(result[f'opt_fa_covs/{dim}'][dimstim_idx])
-                opt_scales = np.diag(result[f'opt_covs/{dim}'][dimstim_idx])
+                opt_fa_scales = np.sqrt(np.diag(result[f'opt_fa_covs/{dim}'][dimstim_idx]))
+                opt_scales = np.sqrt(np.diag(result[f'opt_covs/{dim}'][dimstim_idx]))
                 # Create random variables
                 obs_rv = norm(scale=obs_scales)
                 opt_fa_rv = norm(scale=opt_fa_scales)
