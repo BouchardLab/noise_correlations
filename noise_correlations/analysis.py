@@ -3,12 +3,15 @@ import numpy as np
 import warnings
 
 from scipy.special import comb
+from scipy.stats import norm
 from scipy.stats import spearmanr as sr
 from scipy.stats import special_ortho_group as sog
 from itertools import combinations
 
 from .null_models import shuffle_data, random_rotation
-from .utils import (mean_cov,
+from .utils import (cov2corr,
+                    mean_cov,
+                    get_dimstim_responses_from_h5,
                     get_rotation_for_vectors,
                     uniform_correlation_matrix,
                     X_stimuli,
@@ -1236,3 +1239,123 @@ def get_optimal_cov_statistics(
             )
 
     return corr_optimal_orientation
+
+
+def calculate_fano_factors_and_ncs(results, verbose=True):
+    """Calculate the Fano Factors and noise correlations for a set of
+    results."""
+    opt_r_ffs = []
+    opt_r_ncs = []
+    opt_fa_ffs = []
+    opt_fa_ncs = []
+    obs_ffs = []
+    obs_ncs = []
+
+    for result in results:
+        if verbose:
+            print(result)
+        n_dims, n_dimstims = result['stims'].shape[:2]
+        opt_r_ff = np.zeros((n_dims, n_dimstims))
+        opt_fa_ff = np.zeros_like(opt_r_ff)
+        obs_ff = np.zeros_like(opt_r_ff)
+        opt_r_nc = {}
+        opt_fa_nc = {}
+        obs_nc = {}
+
+        for dim_idx in range(n_dims):
+            dim = dim_idx + 3
+            opt_r_nc_temp = np.zeros((n_dimstims, int(dim * (dim - 1) / 2)))
+            opt_fa_nc_temp = np.zeros_like(opt_r_nc_temp)
+            obs_nc_temp = np.zeros_like(opt_r_nc_temp)
+
+            for dimstim_idx in range(n_dimstims):
+                X1, X2 = get_dimstim_responses_from_h5(result, dim_idx, dimstim_idx)
+                # Get means
+                mu1 = np.mean(X1, axis=0)
+                mu2 = np.mean(X2, axis=0)
+                mu_mean = np.mean(np.vstack((mu1, mu2)), axis=0)
+                # Get covs
+                cov1 = np.cov(X1.T)
+                cov2 = np.cov(X2.T)
+                obs_cov = 0.5 * (cov1 + cov2)
+                # Optimal rotation FF
+                opt_cov = result['opt_covs'][f'{dim}'][dimstim_idx]
+                var_r_opt = np.diag(opt_cov)
+                opt_r_ff[dim_idx, dimstim_idx] = np.mean(var_r_opt / mu_mean)
+                # Optimal FA FF
+                opt_fa_cov = result['opt_fa_covs'][f'{dim}'][dimstim_idx]
+                var_fa_opt = np.diag(opt_fa_cov)
+                opt_fa_ff[dim_idx, dimstim_idx] = np.mean(var_fa_opt / mu_mean)
+                # Observed FF
+                var_obs = np.diag(obs_cov)
+                obs_ff[dim_idx, dimstim_idx] = np.mean(var_obs / mu_mean)
+                # Noise correlations
+                opt_r_nc_temp[dimstim_idx] = cov2corr(opt_cov)[np.triu_indices(dim, k=1)]
+                opt_fa_nc_temp[dimstim_idx] = cov2corr(opt_fa_cov)[np.triu_indices(dim, k=1)]
+                obs_nc_temp[dimstim_idx] = cov2corr(obs_cov)[np.triu_indices(dim, k=1)]
+            opt_r_nc[dim] = opt_r_nc_temp
+            opt_fa_nc[dim] = opt_fa_nc_temp
+            obs_nc[dim] = obs_nc_temp
+        opt_r_ffs.append(opt_r_ff)
+        opt_fa_ffs.append(opt_fa_ff)
+        obs_ffs.append(obs_ff)
+        opt_r_ncs.append(opt_r_nc)
+        opt_fa_ncs.append(opt_fa_nc)
+        obs_ncs.append(obs_nc)
+    return opt_r_ffs, opt_fa_ffs, obs_ffs, opt_r_ncs, opt_fa_ncs, obs_ncs
+
+
+def percentile_experiment(results, percentile=1, verbose=True):
+    all_null_equiv_cdfs = []
+    all_opt_fa_equiv_cdfs = []
+    all_opt_equiv_cdfs = []
+
+    for result in results:
+        if verbose:
+            print(result)
+        n_dims, n_dimstims = result['stims'].shape[:2]
+        null_equiv_cdfs = {}
+        opt_fa_equiv_cdfs = {}
+        opt_equiv_cdfs = {}
+        # Get global design matrix
+        X = result['X'][:]
+        X_percentiles = np.percentile(X, q=percentile, axis=0)
+
+        for dim_idx in range(n_dims):
+            dim = dim_idx + 3
+            null_equiv_cdf = np.zeros((n_dimstims, dim))
+            opt_fa_equiv_cdf = np.zeros_like(null_equiv_cdf)
+            opt_equiv_cdf = np.zeros_like(null_equiv_cdf)
+
+            for dimstim_idx in range(n_dimstims):
+                units = result['units'][dim_idx, dimstim_idx, :dim]
+                X1, X2 = get_dimstim_responses_from_h5(result, dim_idx, dimstim_idx)
+                # Get means
+                mu1 = np.mean(X1, axis=0, keepdims=True)
+                mu2 = np.mean(X2, axis=0, keepdims=True)
+                mu12 = 0.5 * (mu1 + mu2)
+                # Center the data and concatenate
+                var1 = np.var(X1, axis=0)
+                var2 = np.var(X2, axis=0)
+                var12 = 0.5 * (var1 + var2)
+                # Obtain standard deviations for concatenated data
+                obs_scales = np.sqrt(var12)
+                opt_fa_scales = np.sqrt(np.diag(result[f'opt_fa_covs/{dim}'][dimstim_idx]))
+                opt_scales = np.sqrt(np.diag(result[f'opt_covs/{dim}'][dimstim_idx]))
+                # Create random variables
+                obs_rv = norm(loc=mu12, scale=obs_scales)
+                opt_fa_rv = norm(loc=mu12, scale=opt_fa_scales)
+                opt_rv = norm(loc=mu12, scale=opt_scales)
+                # Calculate equivalent CDFs
+                X_percentile_dim = X_percentiles[units]
+                null_equiv_cdf[dimstim_idx] = obs_rv.cdf(X_percentile_dim)
+                opt_fa_equiv_cdf[dimstim_idx] = opt_fa_rv.cdf(X_percentile_dim)
+                opt_equiv_cdf[dimstim_idx] = opt_rv.cdf(X_percentile_dim)
+
+            null_equiv_cdfs[dim] = null_equiv_cdf
+            opt_fa_equiv_cdfs[dim] = opt_fa_equiv_cdf
+            opt_equiv_cdfs[dim] = opt_equiv_cdf
+        all_null_equiv_cdfs.append(null_equiv_cdfs)
+        all_opt_fa_equiv_cdfs.append(opt_fa_equiv_cdfs)
+        all_opt_equiv_cdfs.append(opt_equiv_cdfs)
+    return all_null_equiv_cdfs, all_opt_fa_equiv_cdfs, all_opt_equiv_cdfs
