@@ -768,6 +768,12 @@ def read_avg_cov(h5, dim_idx, dimstim_idx):
 def gen_uniform_correlation(d, rng=None, return_betas=False):
     """Generate a correlation matrix from the uniform distribution.
 
+    Based on:
+    https://www.rdocumentation.org/packages/clusterGeneration/versions/1.3.7
+    and
+    Joe, H. (2006). Generating random correlation matrices based on partial correlations.
+    Journal of Multivariate Analysis, 97(10), 2177-2189.
+
     Parameters
     ----------
     d : int
