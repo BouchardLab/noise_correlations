@@ -461,11 +461,12 @@ def inner_calculate_nulls_measures(
         # Uniform correlation null model
         corr0 = corrs[jj, 0]
         corr1 = corrs[jj, 1]
+        diagu = np.sqrt(np.diag((cov0 + cov1) / 2.))
+        covu = corr0 * np.outer(diagu, diagu)
+        v_u_lfi[jj] = lfi(mu0, covu, mu1, covu, dtheta=dtheta)
         diag0 = np.sqrt(np.diag(cov0))
         diag1 = np.sqrt(np.diag(cov1))
         cov0u = corr0 * np.outer(diag0, diag0)
-        cov1u = corr0 * np.outer(diag1, diag1)
-        v_u_lfi[jj] = lfi(mu0, cov0u, mu1, cov1u, dtheta=dtheta)
         cov1u = corr1 * np.outer(diag1, diag1)
         v_u_sdkl[jj] = sdkl(mu0, cov0u, mu1, cov1u, return_trace=False)
         # Rotation null model
