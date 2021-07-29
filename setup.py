@@ -17,13 +17,3 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
         description='Functions for discriminability metrics and null models of noise correlations.',
         long_description=long_description
         )
-"""
-# To provide executable scripts, use entry points in preference to the
-# "scripts" keyword. Entry points provide cross-platform support and allow
-# pip to create the appropriate form of executable for the target platform.
-entry_points={
-'console_scripts': [
-'ecog=bin:main',
-],
-},
-"""

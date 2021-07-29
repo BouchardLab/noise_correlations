@@ -1,0 +1,16 @@
+name: nc
+channels:
+  - defaults
+dependencies:
+  - python=3.8
+  - jupyterlab
+  - flake8
+  - h5py
+  - scikit-learn
+  - cpuonly
+  - matplotlib
+  - pytorch
+  - pytest
+  - scipy
+  - numpy
+  - numba
