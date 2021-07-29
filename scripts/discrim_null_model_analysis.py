@@ -19,6 +19,8 @@ def main(args):
     data_path = args.data_path
     # Path to rotation dataset
     rotation_path = args.rotation_path
+    # Path to correlation dataset
+    correlation_path = args.correlation_path
     # Folder in which to save the values
     save_folder = args.save_folder
     # Tag to indicate the file in which to save the values
@@ -162,6 +164,12 @@ def main(args):
                 high=max_n_Rs,
                 size=(n_dims, n_dim_stims, n_repeats, 2))
             t1 = time.time()
+        with h5py.File(correlation_path, 'r') as correlations:
+            max_n_corrs = correlations['2'].shape[0]
+            corr_idxs = rng.integers(
+                low=0,
+                high=max_n_corrs,
+                size=(n_dims, n_dim_stims, n_repeats, 2))
         # Creating results filename
         save_name = f'{dataset}_{dim_max}_{n_dimlets}_{n_repeats}.h5'
         if save_tag != '':
@@ -169,6 +177,7 @@ def main(args):
         save_name = os.path.join(save_folder, save_name)
         with h5py.File(save_name, 'w') as results:
             opt_covs_group = results.create_group('opt_covs')
+            opt_u_covs_group = results.create_group('opt_u_covs')
             opt_fa_covs_group = results.create_group('opt_fa_covs')
             # Observed measures in neural data
             results['v_lfi'] = np.zeros((n_dims, n_dim_stims))
@@ -176,6 +185,8 @@ def main(args):
             # Values of measures across shuffles/rotations
             results['v_s_lfi'] = np.zeros((n_dims, n_dim_stims, n_repeats))
             results['v_s_sdkl'] = np.zeros((n_dims, n_dim_stims, n_repeats))
+            results['v_u_lfi'] = np.zeros((n_dims, n_dim_stims, n_repeats))
+            results['v_u_sdkl'] = np.zeros((n_dims, n_dim_stims, n_repeats))
             results['v_r_lfi'] = np.zeros((n_dims, n_dim_stims, n_repeats))
             results['v_r_sdkl'] = np.zeros((n_dims, n_dim_stims, n_repeats))
             results['v_fa_lfi'] = np.zeros((n_dims, n_dim_stims, n_repeats))
@@ -185,17 +196,21 @@ def main(args):
             # Percentiles of measures
             results['p_s_lfi'] = np.zeros((n_dims, n_dim_stims))
             results['p_s_sdkl'] = np.zeros((n_dims, n_dim_stims))
+            results['p_u_lfi'] = np.zeros((n_dims, n_dim_stims))
+            results['p_u_sdkl'] = np.zeros((n_dims, n_dim_stims))
             results['p_r_lfi'] = np.zeros((n_dims, n_dim_stims))
             results['p_r_sdkl'] = np.zeros((n_dims, n_dim_stims))
             results['p_fa_lfi'] = np.zeros((n_dims, n_dim_stims))
             results['p_fa_sdkl'] = np.zeros((n_dims, n_dim_stims))
             # Rotation indices
             results['R_idxs'] = R_idxs
+            results['corr_idxs'] = corr_idxs
             # Dim-stim storage
             results['fa_ks'] = np.zeros((n_dims, n_dim_stims, 3), dtype=int)
             results['units'] = np.zeros((n_dims, n_dim_stims, np.max(dims)), dtype=int)
             results['stims'] = np.zeros((n_dims, n_dim_stims, 2))
     R_idxs = Bcast_from_root(R_idxs, comm)
+    corr_idxs = Bcast_from_root(corr_idxs, comm)
 
     for idx, n_dim in enumerate(dims):
         if rank == 0:
@@ -203,10 +218,11 @@ def main(args):
         # Perform distributed evaluation across null measures
         (v_lfi_temp, v_sdkl_temp,
          v_s_lfi_temp, v_s_sdkl_temp,
+         v_u_lfi_temp, v_u_sdkl_temp,
          v_r_lfi_temp, v_r_sdkl_temp,
          v_fa_lfi_temp, v_fa_sdkl_temp,
          v_fa_fit_lfi_temp, v_fa_fit_sdkl_temp,
-         opt_covs_temp, opt_fa_covs_temp,
+         opt_covs_temp, opt_u_covs_temp, opt_fa_covs_temp,
          stims_temp, units_temp,
          fa_ks_temp) = dist_calculate_nulls_measures_w_rotations(
             X=X,
@@ -215,6 +231,8 @@ def main(args):
             n_dimlets=n_dimlets,
             Rs=rotation_path,
             R_idxs=R_idxs[idx],
+            Rs=correlation_path,
+            R_idxs=corr_idxs[idx],
             rng=rng,
             comm=comm,
             circular_stim=circular_stim,
@@ -231,6 +249,8 @@ def main(args):
                 results['v_sdkl'][idx] = v_sdkl_temp
                 results['v_s_lfi'][idx] = v_s_lfi_temp
                 results['v_s_sdkl'][idx] = v_s_sdkl_temp
+                results['v_u_lfi'][idx] = v_u_lfi_temp
+                results['v_u_sdkl'][idx] = v_u_sdkl_temp
                 results['v_r_lfi'][idx] = v_r_lfi_temp
                 results['v_r_sdkl'][idx] = v_r_sdkl_temp
                 results['v_fa_lfi'][idx] = v_fa_lfi_temp
@@ -240,6 +260,9 @@ def main(args):
                 results['p_s_lfi'][idx] = np.mean(
                     v_lfi_temp[..., np.newaxis] > v_s_lfi_temp, axis=-1
                 )
+                results['p_u_lfi'][idx] = np.mean(
+                    v_lfi_temp[..., np.newaxis] > v_u_lfi_temp, axis=-1
+                )
                 results['p_r_lfi'][idx] = np.mean(
                     v_lfi_temp[..., np.newaxis] > v_r_lfi_temp, axis=-1
                 )
@@ -248,6 +271,9 @@ def main(args):
                 )
                 results['p_s_sdkl'][idx] = np.mean(
                     v_sdkl_temp[..., np.newaxis] > v_s_sdkl_temp, axis=-1
+                )
+                results['p_u_sdkl'][idx] = np.mean(
+                    v_sdkl_temp[..., np.newaxis] > v_u_sdkl_temp, axis=-1
                 )
                 results['p_r_sdkl'][idx] = np.mean(
                     v_sdkl_temp[..., np.newaxis] > v_r_sdkl_temp, axis=-1
@@ -260,6 +286,8 @@ def main(args):
                 results['fa_ks'][idx] = fa_ks_temp
                 opt_covs_group = results['opt_covs']
                 opt_covs_group[str(n_dim)] = opt_covs_temp
+                opt_u_covs_group = results['opt_u_covs']
+                opt_u_covs_group[str(n_dim)] = opt_u_covs_temp
                 opt_fa_covs_group = results['opt_fa_covs']
                 opt_fa_covs_group[str(n_dim)] = opt_fa_covs_temp
 
@@ -282,6 +310,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run noise correlations analysis.')
     parser.add_argument('--data_path', type=str)
     parser.add_argument('--rotation_path', type=str)
+    parser.add_argument('--correlation_path', type=str)
     parser.add_argument('--save_folder', default='', type=str)
     parser.add_argument('--save_tag', type=str, default='')
     parser.add_argument('--dataset', choices=['pvc11', 'ret2', 'ac1', 'cv', 'ecog'])
