@@ -182,9 +182,10 @@ def lfi_uniform_corr_opt_cov(var, mu0, mu1, rng, n_restarts=10):
     args = d, mu0, mu1, sigma
 
     for ii in range(n_restarts):
-        X = rng.randn(d**2)
+        X = rng.standard_normal(size=d**2)
         X /= np.linalg.norm(X, axis=0)
         try:
+            print('got her')
             params = minimize(f_df_corr, X, method='L-BFGS-B', jac=True, args=args).x
             paramst = torch.tensor(params)
             opt_cov = make_corr(paramst, d)

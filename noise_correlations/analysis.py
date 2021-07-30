@@ -817,9 +817,9 @@ def dist_calculate_nulls_measures(
 
 
 def dist_calculate_nulls_measures_w_rotations(
-    X, stimuli, n_dim, n_dimlets, Rs, R_idxs, corrs, corr_idxs, rng, comm, circular_stim=False,
-    all_stim=True, unordered=False, n_stims_per_dimlet=None, verbose=False,
-    stim_transform=None, k=None
+    X, stimuli, n_dim, n_dimlets, Rs, R_idxs, corrs, corr_idxs, rng, comm,
+    circular_stim=False, all_stim=True, unordered=False, n_stims_per_dimlet=None,
+    verbose=False, stim_transform=None, k=None
 ):
     """Calculates null model distributions for linear Fisher information and
     symmetric KL-divergence, in a distributed manner.

@@ -154,8 +154,10 @@ def main(args):
         n_dim_stims = n_dimlets
 
     R_idxs = None
+    corr_idxs = None
     if rank == 0:
         R_idxs = None
+        corr_idxs = None
         # Get rotations for this dimension
         with h5py.File(rotation_path, 'r') as rotations:
             max_n_Rs = rotations['2'].shape[0]
