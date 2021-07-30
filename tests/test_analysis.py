@@ -31,7 +31,7 @@ def test_generate_stim_pair():
     n_samples = 12
     stimuli = np.repeat(unique_stims, n_samples / n_stims)
     # random state
-    rng = np.random.RandomState(2332)
+    rng = np.random.default_rng(2332)
 
     # multiple repetitions for randomness
     for rep in range(n_repeats):
@@ -56,7 +56,7 @@ def test_generate_dimlets_and_stim_pairs():
     n_samples = 12
     stimuli = np.repeat(unique_stims, n_samples / n_stims)
     # random state
-    rng = np.random.RandomState(2332)
+    rng = np.random.default_rng(2332)
 
     # case 1: all_stim is True, no circular stim
     units, stims = analysis.generate_dimlets_and_stim_pairs(
