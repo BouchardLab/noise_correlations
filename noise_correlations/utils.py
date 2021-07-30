@@ -139,7 +139,7 @@ def make_corr(paramst, d):
     """
     X = paramst.reshape(d, d)
     X = X / torch.norm(X, dim=0)
-    return X.t() @ X
+    return X.t() @ X + torch.eye(d, dtype=paramst.dtype) * 1e-10
 
 
 def f_df_corr(params, d, mu0, mu1, sigma):
