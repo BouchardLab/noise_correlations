@@ -15,7 +15,8 @@ from .utils import (cov2corr,
                     get_rotation_for_vectors,
                     uniform_correlation_matrix,
                     X_stimuli,
-                    FACov)
+                    FACov,
+                    lfi_uniform_corr_opt_cov)
 from .discriminability import (lfi, lfi_data,
                                mv_normal_jeffreys as sdkl,
                                mv_normal_jeffreys_data as sdkl_data)
@@ -364,7 +365,7 @@ def inner_compare_nulls_measures(X, stimuli, unit_idxs, stim_vals, rng, n_repeat
 
 
 def inner_calculate_nulls_measures(
-    X, stimuli, unit_idxs, stim_vals, Rs, rng, k, circular_stim=False,
+    X, stimuli, unit_idxs, stim_vals, Rs, corrs, rng, k, circular_stim=False,
     stim_transform=None
 ):
     """Calculates values of metrics on a dimlet of a neural design matrix under
@@ -380,6 +381,10 @@ def inner_calculate_nulls_measures(
         The indices for the units in the dimlet.
     stim_vals : ndarray
         The values of a randomly chosen pair of stimuli.
+    Rs : ndarray
+        (n_repeats, 2) rotation matrices for the Rotation and FA null models
+    corrs : ndarray
+        (n_repeats, 2) correlation matrices for the Uniform fixed-marginal null model.
     rng : RandomState
         Random state instance.
     n_repeats : int
@@ -413,6 +418,7 @@ def inner_calculate_nulls_measures(
     fac01 = FACov(X01, k=k)
     # Calculate optimal orientations
     opt_fa_cov = fac01.get_optimal_orientation(mu0, mu1)
+    opt_u_cov = lfi_uniform_corr_opt_cov(np.diag((cov0 + cov1) / 2.), mu0, mu1, rng)
     _, opt_cov = get_optimal_orientation(mu0, mu1, cov0, cov1)
     # Calculate stimulus difference
     if circular_stim:
@@ -434,6 +440,9 @@ def inner_calculate_nulls_measures(
     # Values for measures on shuffled data
     v_s_lfi = np.zeros(n_repeats)
     v_s_sdkl = np.zeros(n_repeats)
+    # Values for measure on uniform correlation data
+    v_u_lfi = np.zeros(n_repeats)
+    v_u_sdkl = np.zeros(n_repeats)
     # Values for measures on rotated data
     v_r_lfi = np.zeros(n_repeats)
     v_r_sdkl = np.zeros(n_repeats)
@@ -449,6 +458,17 @@ def inner_calculate_nulls_measures(
         X1s = shuffle_data(X1, rng=rng)
         v_s_lfi[jj] = lfi_data(X0s, X1s, dtheta=dtheta)
         v_s_sdkl[jj] = sdkl_data(X0s, X1s, return_trace=False)
+        # Uniform correlation null model
+        corr0 = corrs[jj, 0]
+        corr1 = corrs[jj, 1]
+        diagu = np.sqrt(np.diag((cov0 + cov1) / 2.))
+        covu = corr0 * np.outer(diagu, diagu)
+        v_u_lfi[jj] = lfi(mu0, covu, mu1, covu, dtheta=dtheta)
+        diag0 = np.sqrt(np.diag(cov0))
+        diag1 = np.sqrt(np.diag(cov1))
+        cov0u = corr0 * np.outer(diag0, diag0)
+        cov1u = corr1 * np.outer(diag1, diag1)
+        v_u_sdkl[jj] = sdkl(mu0, cov0u, mu1, cov1u, return_trace=False)
         # Rotation null model
         R0 = Rs[jj, 0]
         R1 = Rs[jj, 1]
@@ -466,10 +486,11 @@ def inner_calculate_nulls_measures(
         v_fa_sdkl[jj] = sdkl(mu0, cov0r, mu1, cov1r)
     return (v_lfi, v_sdkl,
             v_s_lfi, v_s_sdkl,
+            v_u_lfi, v_u_sdkl,
             v_r_lfi, v_r_sdkl,
             v_fa_lfi, v_fa_sdkl,
             v_fa_fit_lfi, v_fa_fit_sdkl,
-            opt_cov, opt_fa_cov,
+            opt_cov, opt_u_cov, opt_fa_cov,
             fa_ks)
 
 
@@ -796,7 +817,7 @@ def dist_calculate_nulls_measures(
 
 
 def dist_calculate_nulls_measures_w_rotations(
-    X, stimuli, n_dim, n_dimlets, Rs, R_idxs, rng, comm, circular_stim=False,
+    X, stimuli, n_dim, n_dimlets, Rs, R_idxs, corrs, corr_idxs, rng, comm, circular_stim=False,
     all_stim=True, unordered=False, n_stims_per_dimlet=None, verbose=False,
     stim_transform=None, k=None
 ):
@@ -817,7 +838,13 @@ def dist_calculate_nulls_measures_w_rotations(
     n_dimlets : int
         The number of dimlets over which to calculate p-values.
     Rs : np.ndarray, shape (n_repeats, 2, n_dim, n_dim)
-        The rotation matrix to use for each repeat.
+        The rotation matricies to use for each repeat, or a path to an HDF5 file.
+    R_idxs : np.ndarray
+        The rotation matrix indices to use for each repeat.
+    corrs : np.ndarray, shape (n_repeats, 2, n_dim, n_dim)
+        The correlation matrices to use for each repeat, or a path to an HDF5 file.
+    corr_idxs : np.ndarray
+        The correlation matrix indices to use for each repeat.
     rng : RandomState
         Random state instance.
     circular_stim : bool
@@ -877,6 +904,8 @@ def dist_calculate_nulls_measures_w_rotations(
     v_sdkl = np.zeros(my_dimlets)
     v_s_lfi = np.zeros((my_dimlets, n_repeats))
     v_s_sdkl = np.zeros_like(v_s_lfi)
+    v_u_lfi = np.zeros_like(v_s_lfi)
+    v_u_sdkl = np.zeros_like(v_s_lfi)
     v_r_lfi = np.zeros_like(v_s_lfi)
     v_r_sdkl = np.zeros_like(v_s_lfi)
     v_fa_lfi = np.zeros_like(v_s_lfi)
@@ -884,6 +913,7 @@ def dist_calculate_nulls_measures_w_rotations(
     v_fa_fit_lfi = np.zeros(my_dimlets)
     v_fa_fit_sdkl = np.zeros(my_dimlets)
     opt_covs = np.zeros((my_dimlets, n_dim, n_dim))
+    opt_u_covs = np.zeros((my_dimlets, n_dim, n_dim))
     opt_fa_covs = np.zeros((my_dimlets, n_dim, n_dim))
     fa_ks = np.zeros((my_dimlets, 3), dtype=int)
 
@@ -891,7 +921,7 @@ def dist_calculate_nulls_measures_w_rotations(
     for ii in range(my_dimlets):
         if rank == 0 and verbose:
             print('Dimension %s' % n_dim, '{} out of {}'.format(ii + 1, my_dimlets))
-        unit_idxs, stim_vals, R_idx = units[ii], stims[ii], R_idxs[ii]
+        unit_idxs, stim_vals, R_idx, corr_idx = units[ii], stims[ii], R_idxs[ii], corr_idxs[ii]
         if isinstance(Rs, np.ndarray):
             R = Rs[R_idx.ravel()].reshape(R_idx.shape + (n_units, n_units))
         else:
@@ -904,13 +934,26 @@ def dist_calculate_nulls_measures_w_rotations(
                 # Reshape rotation matrices
                 R = R.reshape(R_idx.shape + (n_dim, n_dim))
 
+        if isinstance(corrs, np.ndarray):
+            corr = corrs[corr_idx.ravel()].reshape(corr_idx.shape + (n_units, n_units))
+        else:
+            with h5py.File(Rs, 'r') as correlations:
+                corr_idx_unique, indices = np.unique(corr_idx.ravel(), return_inverse=True)
+                # Get correlation matrices used sorted indices
+                corr = correlations[str(n_dim)][corr_idx_unique]
+                # Re-organized correlation matrices according to original order
+                corr = corr[np.arange(corr_idx_unique.size)[indices]]
+                # Reshape correlation matrices
+                corr = corr.reshape(corr_idx.shape + (n_dim, n_dim))
+
         # Calculate values under shuffle and rotation null models
         (v_lfi[ii], v_sdkl[ii],
          v_s_lfi[ii], v_s_sdkl[ii],
+         v_u_lfi[ii], v_u_sdkl[ii],
          v_r_lfi[ii], v_r_sdkl[ii],
          v_fa_lfi[ii], v_fa_sdkl[ii],
          v_fa_fit_lfi[ii], v_fa_fit_sdkl[ii],
-         opt_covs[ii], opt_fa_covs[ii],
+         opt_covs[ii], opt_u_covs[ii], opt_fa_covs[ii],
          fa_ks[ii]) = \
             inner_calculate_nulls_measures(
                 X=X,
@@ -918,6 +961,7 @@ def dist_calculate_nulls_measures_w_rotations(
                 unit_idxs=unit_idxs,
                 stim_vals=stim_vals,
                 Rs=R,
+                corrs=corr,
                 rng=rng,
                 circular_stim=circular_stim,
                 stim_transform=stim_transform,
@@ -928,6 +972,8 @@ def dist_calculate_nulls_measures_w_rotations(
     v_sdkl = Gatherv_rows(v_sdkl, comm)
     v_s_lfi = Gatherv_rows(v_s_lfi, comm)
     v_s_sdkl = Gatherv_rows(v_s_sdkl, comm)
+    v_u_lfi = Gatherv_rows(v_u_lfi, comm)
+    v_u_sdkl = Gatherv_rows(v_u_sdkl, comm)
     v_r_lfi = Gatherv_rows(v_r_lfi, comm)
     v_r_sdkl = Gatherv_rows(v_r_sdkl, comm)
     v_fa_lfi = Gatherv_rows(v_fa_lfi, comm)
@@ -935,15 +981,17 @@ def dist_calculate_nulls_measures_w_rotations(
     v_fa_fit_lfi = Gatherv_rows(v_fa_fit_lfi, comm)
     v_fa_fit_sdkl = Gatherv_rows(v_fa_fit_sdkl, comm)
     opt_covs = Gatherv_rows(opt_covs, comm)
+    opt_u_covs = Gatherv_rows(opt_u_covs, comm)
     opt_fa_covs = Gatherv_rows(opt_fa_covs, comm)
     fa_ks = Gatherv_rows(fa_ks, comm)
 
     return (v_lfi, v_sdkl,
             v_s_lfi, v_s_sdkl,
+            v_u_lfi, v_u_sdkl,
             v_r_lfi, v_r_sdkl,
             v_fa_lfi, v_fa_sdkl,
             v_fa_fit_lfi, v_fa_fit_sdkl,
-            opt_covs, opt_fa_covs,
+            opt_covs, opt_u_covs, opt_fa_covs,
             all_stims, all_units,
             fa_ks)
 

@@ -133,6 +133,73 @@ class FACov:
         return opt_cov
 
 
+def make_corr(paramst, d):
+    """Helper function for turning a list of params into a
+    correlations matrix.
+    """
+    X = paramst.reshape(d, d)
+    X = X / torch.norm(X, dim=0)
+    return X.t() @ X
+
+
+def f_df_corr(params, d, mu0, mu1, sigma):
+    """Loss and gradient to optimize correlation matrix.
+    """
+    paramst = torch.tensor(params, requires_grad=True)
+    cov = make_corr(paramst, d) * torch.outer(sigma, sigma)
+    loss = -_lfi(mu0, mu1, cov)
+    X = paramst.reshape(d, d)
+    loss = loss + 0.1 * torch.sum((1. - torch.norm(X, dim=0))**2)
+    loss.backward()
+    loss = loss.detach().numpy()
+    grad = paramst.grad.detach().numpy()
+    return loss, grad
+
+
+def lfi_uniform_corr_opt_cov(var, mu0, mu1, rng, n_restarts=10):
+    """Optimize the covariance correlations to maximize LFI.
+
+    Parameters
+    ----------
+    var : ndarray (d,)
+        Array from the covariance diagonal.
+    mu0 : ndarray (1, d)
+        Mean for stim 0
+    mu1 : ndarray (1, d)
+        Mean for stim 1
+    rng : RandomState
+        Numpy random generator.
+    n_restarts : int
+        Number of re-initializations. This problem is not convex, so
+        we try and find the highest LFI over a few restarts.
+    """
+    lfi_keep = -np.inf
+    cov_keep = None
+    sigma = torch.tensor(np.sqrt(var))
+    d = sigma.shape[0]
+    mu0 = torch.tensor(mu0)
+    mu1 = torch.tensor(mu1)
+    args = d, mu0, mu1, sigma
+
+    for ii in range(n_restarts):
+        X = rng.randn(d**2)
+        X /= np.linalg.norm(X, axis=0)
+        try:
+            params = minimize(f_df_corr, X, method='L-BFGS-B', jac=True, args=args).x
+            paramst = torch.tensor(params)
+            opt_cov = make_corr(paramst, d)
+            opt_cov = opt_cov * torch.outer(sigma, sigma)
+            lfi = np.squeeze(_lfi(mu0, mu1, opt_cov).numpy())
+        except RuntimeError:
+            lfi = -np.inf
+        if lfi > lfi_keep:
+            cov_keep = opt_cov.numpy()
+            lfi_keep = lfi
+    if lfi_keep < 0.:
+        cov_keep = np.zeros((d, d))
+    return cov_keep
+
+
 def circular_difference(v1, v2, maximum=360):
     """Calculates the circular difference between two vectors, with some
     maximum."""
