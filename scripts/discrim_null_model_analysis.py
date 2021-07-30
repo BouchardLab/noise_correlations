@@ -165,7 +165,6 @@ def main(args):
                 low=0,
                 high=max_n_Rs,
                 size=(n_dims, n_dim_stims, n_repeats, 2))
-            t1 = time.time()
         with h5py.File(correlation_path, 'r') as correlations:
             max_n_corrs = correlations['2'].shape[0]
             corr_idxs = rng.integers(
@@ -217,6 +216,7 @@ def main(args):
     for idx, n_dim in enumerate(dims):
         if rank == 0:
             print(f'>>> Dimension {n_dim}')
+            t1 = time.time()
         # Perform distributed evaluation across null measures
         (v_lfi_temp, v_sdkl_temp,
          v_s_lfi_temp, v_s_sdkl_temp,

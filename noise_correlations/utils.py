@@ -139,14 +139,15 @@ def make_corr(paramst, d):
     """
     X = paramst.reshape(d, d)
     X = X / torch.norm(X, dim=0)
-    return X.t() @ X + torch.eye(d, dtype=paramst.dtype) * 1e-10
+    return X.t() @ X
 
 
 def f_df_corr(params, d, mu0, mu1, sigma):
     """Loss and gradient to optimize correlation matrix.
     """
     paramst = torch.tensor(params, requires_grad=True)
-    cov = make_corr(paramst, d) * torch.outer(sigma, sigma)
+    corr = make_corr(paramst, d)
+    cov = torch.eye(d, dtype=paramst.dtype) * 1e-10 + corr * torch.outer(sigma, sigma)
     loss = -_lfi(mu0, mu1, cov)
     X = paramst.reshape(d, d)
     loss = loss + 0.1 * torch.sum((1. - torch.norm(X, dim=0))**2)
@@ -177,18 +178,17 @@ def lfi_uniform_corr_opt_cov(var, mu0, mu1, rng, n_restarts=10):
     cov_keep = None
     sigma = torch.tensor(np.sqrt(var))
     d = sigma.shape[0]
-    mu0 = torch.tensor(mu0)
-    mu1 = torch.tensor(mu1)
+    mu0 = torch.tensor(mu0)[np.newaxis]
+    mu1 = torch.tensor(mu1)[np.newaxis]
     args = d, mu0, mu1, sigma
 
     for ii in range(n_restarts):
         X = rng.standard_normal(size=d**2)
         X /= np.linalg.norm(X, axis=0)
         try:
-            print('got her')
             params = minimize(f_df_corr, X, method='L-BFGS-B', jac=True, args=args).x
             paramst = torch.tensor(params)
-            opt_cov = make_corr(paramst, d)
+            opt_cov = torch.eye(d, dtype=paramst.dtype) * 1e-10 + make_corr(paramst, d)
             opt_cov = opt_cov * torch.outer(sigma, sigma)
             lfi = np.squeeze(_lfi(mu0, mu1, opt_cov).numpy())
         except RuntimeError:

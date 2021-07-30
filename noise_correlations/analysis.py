@@ -418,7 +418,7 @@ def inner_calculate_nulls_measures(
     fac01 = FACov(X01, k=k)
     # Calculate optimal orientations
     opt_fa_cov = fac01.get_optimal_orientation(mu0, mu1)
-    opt_u_cov = lfi_uniform_corr_opt_cov(np.diag((cov0 + cov1) / 2.), mu0, mu1, rng)
+    opt_u_cov = lfi_uniform_corr_opt_cov(np.diag((cov0 + cov1) / 2.), mu0, mu1, rng, n_restarts=1)
     _, opt_cov = get_optimal_orientation(mu0, mu1, cov0, cov1)
     # Calculate stimulus difference
     if circular_stim:
