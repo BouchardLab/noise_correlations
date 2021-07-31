@@ -937,7 +937,7 @@ def dist_calculate_nulls_measures_w_rotations(
         if isinstance(corrs, np.ndarray):
             corr = corrs[corr_idx.ravel()].reshape(corr_idx.shape + (n_units, n_units))
         else:
-            with h5py.File(Rs, 'r') as correlations:
+            with h5py.File(corrs, 'r') as correlations:
                 corr_idx_unique, indices = np.unique(corr_idx.ravel(), return_inverse=True)
                 # Get correlation matrices used sorted indices
                 corr = correlations[str(n_dim)][corr_idx_unique]
