@@ -7,6 +7,7 @@ colors = {
 }
 titles = ['Retina', 'V1', 'PAC']
 
-ax_label_size = 12
-tick_label_size = 10
-letter_size = 18
+ax_label_size = 10
+tick_label_size = 6
+letter_size = ax_label_size
+legend_size = tick_label_size
