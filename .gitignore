@@ -1,4 +1,3 @@
-*.h5
 .DS_Store
 .vscode
 
@@ -107,5 +106,7 @@ ENV/
 # files
 *.pdf
 *.png
+*.jpg
 *.npz
 *.mat
+*.h5
