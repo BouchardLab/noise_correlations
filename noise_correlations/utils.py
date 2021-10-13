@@ -831,3 +831,76 @@ def read_avg_cov(h5, dim_idx, dimstim_idx):
     X1, X2 = get_dimstim_responses_from_h5(h5, dim_idx, dimstim_idx)
     avg_cov = 0.5 * (np.cov(X1.T) + np.cov(X2.T))
     return avg_cov
+
+
+def find_fraction(ps, value=2/3):
+    """For a series of percentile arrays, `ps`, find the fraction of samples such
+    that the median is at least `value`.
+
+    Parameters
+    ----------
+    ps : ndarray (dims, percentiles)
+        Array of percentiles, analysis is done row-wise.
+    value : float
+        Percentile value for median to be above or equal to.
+    
+    """
+    ps = np.atleast_2d(ps)
+    ps = np.sort(ps, axis=1)
+    ndims, n_samples = ps.shape
+    fractions = np.zeros(ndims)
+    for ii in range(ndims):
+        p = ps[ii]
+        if p[-1] < value:
+            fractions[ii] = 0.
+        elif p[0] >= value:
+            fractions[ii] = 1.
+        else:
+            lower = 0
+            upper = n_samples - 1
+            medl = np.median(p[lower:])
+            medu = np.median(p[upper:])
+            while upper > lower + 1:
+                idx = (lower + upper) // 2
+                medi = np.median(p[idx:])
+                if medi > value:
+                    upper = idx
+                else:
+                    lower = idx
+                upper = max(upper, lower + 1)
+            fractions[ii] = (n_samples - upper) / n_samples
+    return np.squeeze(fractions)
+
+
+def run_bootstrap(data, func, ci):
+    """Calculate bootstrap confidence intervals on data for the
+    statistics defined by func().
+
+    Parameters
+    ----------
+    data : ndarray (n_samples,) or (dims, n_samples)
+        Data to bootstrap.
+    func : callable
+        Should accept an array of samples and return a scalar.
+    ci : float
+        Desired confidence interval.
+    """
+    if data.ndim == 1:
+        out = np.zeros(3)
+        out[1] = func(data)
+        stats = ss.bootstrap([data], func, vectorized=False, method='basic',
+                             confidence_level=ci).confidence_interval
+        out[0] = stats.low
+        out[2] = stats.high
+    elif data.ndim == 2:
+        out = np.zeros((data.shape[0], 3))
+        for ii in range(data.shape[0]):
+            out[ii, 1] = func(data[ii])
+            stats = ss.bootstrap([data[ii]], func, vectorized=False, method='basic',
+                                 confidence_level=ci).confidence_interval
+            out[ii, 0] = stats.low
+            out[ii, 2] = stats.high
+    else:
+        raise ValueError
+
+    return out
