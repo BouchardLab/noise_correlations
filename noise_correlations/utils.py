@@ -885,21 +885,42 @@ def run_bootstrap(data, func, ci):
     ci : float
         Desired confidence interval.
     """
-    if data.ndim == 1:
+    many = False
+    if isinstance(data, np.ndarray):
+        ndim = data.ndim
+    else:
+        ndim = data[0].ndim
+        many = True
+
+    if ndim == 1:
         out = np.zeros(3)
-        out[1] = func(data)
-        stats = ss.bootstrap([data], func, vectorized=False, method='basic',
-                             confidence_level=ci).confidence_interval
+        if many:
+            out[1] = func(*data)
+            stats = ss.bootstrap(data, func, vectorized=False, method='basic',
+                                 confidence_level=ci, paired=True).confidence_interval
+        else:
+            out[1] = func(data)
+            stats = ss.bootstrap([data], func, vectorized=False, method='basic',
+                                 confidence_level=ci).confidence_interval
         out[0] = stats.low
         out[2] = stats.high
-    elif data.ndim == 2:
-        out = np.zeros((data.shape[0], 3))
-        for ii in range(data.shape[0]):
-            out[ii, 1] = func(data[ii])
-            stats = ss.bootstrap([data[ii]], func, vectorized=False, method='basic',
-                                 confidence_level=ci).confidence_interval
-            out[ii, 0] = stats.low
-            out[ii, 2] = stats.high
+    elif ndim == 2:
+        if many:
+            out = np.zeros((data[0].shape[0], 3))
+            for ii in range(data[0].shape[0]):
+                out[ii, 1] = func(*[d[ii] for d in data])
+                stats = ss.bootstrap([d[ii] for d in data], func, vectorized=False, method='basic',
+                                     confidence_level=ci, paired=True).confidence_interval
+                out[ii, 0] = stats.low
+                out[ii, 2] = stats.high
+        else:
+            out = np.zeros((data.shape[0], 3))
+            for ii in range(data.shape[0]):
+                out[ii, 1] = func(data[ii])
+                stats = ss.bootstrap([data[ii]], func, vectorized=False, method='basic',
+                                     confidence_level=ci).confidence_interval
+                out[ii, 0] = stats.low
+                out[ii, 2] = stats.high
     else:
         raise ValueError
 
