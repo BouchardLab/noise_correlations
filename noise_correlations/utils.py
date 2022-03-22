@@ -539,7 +539,10 @@ def get_tuned_units(
     keep = np.ones(n_units)
     # peak of each tuning curve must be some minimum value
     peak_responses = get_peak_response(X, stimuli, aggregator=aggregator)
-    valid = peak_responses > peak_response
+    if peak_response is not None:
+        valid = peak_responses > peak_response
+    else:
+        valid = True
     keep = np.logical_and(keep, valid)
     # the min-to-max distance must be at least some minimum value
     if tuning_criteria == 'p-value':
@@ -843,7 +846,7 @@ def find_fraction(ps, value=2/3):
         Array of percentiles, analysis is done row-wise.
     value : float
         Percentile value for median to be above or equal to.
-    
+
     """
     ps = np.atleast_2d(ps)
     ps = np.sort(ps, axis=1)

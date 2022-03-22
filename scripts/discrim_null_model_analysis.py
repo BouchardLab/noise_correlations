@@ -119,7 +119,25 @@ def main(args):
             amplitudes = pack.get_design_matrix(form='amplitude')
             stimuli = stimuli[np.isin(amplitudes, [5, 6, 7])]
             unique_stimuli = np.unique(stimuli)
-
+    # Ji lab dataset, drifting gratings, mouse v1, calcium imaging
+    elif dataset == 'v1':
+        circular_stim = True
+        unordered = False
+        stim_transform = None
+        if rank == 0:
+            pack = packs.V1(data_path=data_path)
+            # get design matrix and stimuli
+            X = pack.get_response_matrix(cells='all', response='max')
+            stimuli = pack.get_design_matrix(form='angle')
+            selected_units = utils.get_tuned_units(
+                X=X, stimuli=stimuli,
+                aggregator=np.mean,
+                peak_response=30,
+                tuning_criteria=args.tuning_criteria,
+                modulation=args.min_modulation,
+                modulation_frac=args.modulation_frac,
+                variance_to_mean=10.)
+            X = X[:, selected_units]
     else:
         raise ValueError('Dataset not available.')
 
