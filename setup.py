@@ -15,5 +15,6 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     setup(
         name='noise_correlations',
         description='Functions for discriminability metrics and null models of noise correlations.',
-        long_description=long_description
+        long_description=long_description,
+        packages=['noise_correlations']
         )
