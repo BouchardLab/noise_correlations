@@ -7,6 +7,7 @@ import neuropacks as packs
 import numpy as np
 import os
 import time
+from pathlib import Path
 
 from mpi4py import MPI
 from mpi_utils.ndarray import Bcast_from_root
@@ -124,8 +125,17 @@ def main(args):
         circular_stim = True
         unordered = False
         stim_transform = None
+        p = Path(data_path)
+        sessions = [s.stem for s in p.iterdir() if s.is_dir()]
+        data_path, depth = os.path.split(data_path)
+        data_path, date_anim = os.path.split(data_path)
+        date = date_anim.split('_')[0]
+        files = []
+        for sess in sessions:
+            fname = f'ROI_{date}AllTif_RM_{sess}_Intensity_unweighted_s2p_NpMethod1_Coe0.75_Exclusion_NpSize30.mat'
+            files.append(os.path.join(data_path, date_anim, depth, sess, fname))
         if rank == 0:
-            pack = packs.V1(data_path=data_path)
+            pack = packs.V1(data_path=files)
             # get design matrix and stimuli
             X = pack.get_response_matrix(cells='all', response='max')
             stimuli = pack.get_design_matrix(form='angle')
@@ -333,7 +343,7 @@ if __name__ == '__main__':
     parser.add_argument('--correlation_path', type=str)
     parser.add_argument('--save_folder', default='', type=str)
     parser.add_argument('--save_tag', type=str, default='')
-    parser.add_argument('--dataset', choices=['pvc11', 'ret2', 'ac1', 'cv', 'ecog'])
+    parser.add_argument('--dataset', choices=['pvc11', 'ret2', 'ac1', 'cv', 'ecog', 'v1'])
     parser.add_argument('--dim_min', type=int, default=2)
     parser.add_argument('--dim_max', type=int)
     parser.add_argument('--n_dimlets', '-n', type=int, default=1000)
