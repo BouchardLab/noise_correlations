@@ -567,7 +567,7 @@ def inner_calculate_nulls_lfi(
     # Values for measures on fa rotated data
     v_fa_lfi = np.zeros(n_repeats)
     fa_ks = np.zeros(3, dtype=int)
-    fa_ks[:] = (fac0.k, 0, 0)
+    fa_ks[:] = (fac01.k, 0, 0)
 
     for jj in range(n_repeats):
         # Shuffle null model

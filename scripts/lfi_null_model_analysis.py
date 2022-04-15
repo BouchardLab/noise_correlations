@@ -3,13 +3,14 @@ randomly chosen sub-populations of different sizes between a shuffle and
 rotation null model."""
 import argparse
 import h5py
-import neuropacks as packs
 import numpy as np
 import os
 import time
+from pathlib import Path
 
 from mpi4py import MPI
 from mpi_utils.ndarray import Bcast_from_root
+import neuropacks as packs
 from noise_correlations.analysis import dist_calculate_nulls_lfi_w_rotations
 from noise_correlations import utils
 
