@@ -3,13 +3,14 @@ randomly chosen sub-populations of different sizes between a shuffle and
 rotation null model."""
 import argparse
 import h5py
-import neuropacks as packs
 import numpy as np
 import os
 import time
-
+from pathlib import Path
 from mpi4py import MPI
 from mpi_utils.ndarray import Bcast_from_root
+
+import neuropacks as packs
 from noise_correlations.analysis import dist_calculate_nulls_lfi_w_rotations
 from noise_correlations import utils
 
@@ -124,8 +125,17 @@ def main(args):
         circular_stim = True
         unordered = False
         stim_transform = None
+        p = Path(data_path)
+        sessions = [s.stem for s in p.iterdir() if s.is_dir()]
+        data_path, depth = os.path.split(data_path)
+        data_path, date_anim = os.path.split(data_path)
+        date = date_anim.split('_')[0]
+        files = []
+        for sess in sessions:
+            fname = f'ROI_{date}AllTif_RM_{sess}_Intensity_unweighted_s2p_NpMethod1_Coe0.75_Exclusion_NpSize30.mat'
+            files.append(os.path.join(data_path, date_anim, depth, sess, fname))
         if rank == 0:
-            pack = packs.V1(data_path=data_path)
+            pack = packs.V1(data_path=files)
             # get design matrix and stimuli
             X = pack.get_response_matrix(cells='all', response='max')
             stimuli = pack.get_design_matrix(form='angle')
@@ -264,6 +274,7 @@ def main(args):
                 )
                 results['p_fa_lfi'][idx] = np.mean(
                     v_lfi_temp[..., np.newaxis] > v_fa_lfi_temp, axis=-1
+                )
                 results['units'][idx, :, :n_dim] = units_temp
                 results['stims'][idx] = stims_temp
                 results['fa_ks'][idx] = fa_ks_temp
@@ -278,10 +289,9 @@ def main(args):
         print('==============================================================')
         print('>>> Saving additional data...')
         # Store datasets
-        results = h5py.File(save_name, 'a')
-        results['X'] = X
-        results['stimuli'] = stimuli
-        results.close()
+        with h5py.File(save_name, 'a') as results:
+            results['X'] = X
+            results['stimuli'] = stimuli
         print('Successfully Saved.')
         print('Job complete. Total time:', time.time() - t0)
         print('--------------------------------------------------------------')
@@ -294,7 +304,7 @@ if __name__ == '__main__':
     parser.add_argument('--correlation_path', type=str)
     parser.add_argument('--save_folder', default='', type=str)
     parser.add_argument('--save_tag', type=str, default='')
-    parser.add_argument('--dataset', choices=['pvc11', 'ret2', 'ac1', 'cv', 'ecog'])
+    parser.add_argument('--dataset', choices=['pvc11', 'ret2', 'ac1', 'cv', 'ecog', 'v1'])
     parser.add_argument('--dim_min', type=int, default=2)
     parser.add_argument('--dim_max', type=int)
     parser.add_argument('--n_dimlets', '-n', type=int, default=1000)
