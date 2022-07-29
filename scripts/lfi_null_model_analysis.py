@@ -10,7 +10,7 @@ import time
 
 from mpi4py import MPI
 from mpi_utils.ndarray import Bcast_from_root
-from noise_correlations.analysis import dist_calculate_nulls_measures_w_rotations
+from noise_correlations.analysis import dist_calculate_nulls_lfi_w_rotations
 from noise_correlations import utils
 
 
@@ -202,13 +202,11 @@ def main(args):
             # Values of measures across shuffles/rotations
             results['v_s_lfi'] = np.zeros((n_dims, n_dim_stims, n_repeats))
             results['v_u_lfi'] = np.zeros((n_dims, n_dim_stims, n_repeats))
-            results['v_r_lfi'] = np.zeros((n_dims, n_dim_stims, n_repeats))
             results['v_fa_lfi'] = np.zeros((n_dims, n_dim_stims, n_repeats))
             results['v_fa_fit_lfi'] = np.zeros((n_dims, n_dim_stims))
             # Percentiles of measures
             results['p_s_lfi'] = np.zeros((n_dims, n_dim_stims))
             results['p_u_lfi'] = np.zeros((n_dims, n_dim_stims))
-            results['p_r_lfi'] = np.zeros((n_dims, n_dim_stims))
             results['p_fa_lfi'] = np.zeros((n_dims, n_dim_stims))
             # Rotation indices
             results['R_idxs'] = R_idxs
@@ -225,15 +223,14 @@ def main(args):
             print(f'>>> Dimension {n_dim}')
             t1 = time.time()
         # Perform distributed evaluation across null measures
-        (v_lfi_temp, v_sdkl_temp,
-         v_s_lfi_temp, v_s_sdkl_temp,
-         v_u_lfi_temp, v_u_sdkl_temp,
-         v_r_lfi_temp, v_r_sdkl_temp,
-         v_fa_lfi_temp, v_fa_sdkl_temp,
-         v_fa_fit_lfi_temp, v_fa_fit_sdkl_temp,
-         opt_covs_temp, opt_u_covs_temp, opt_fa_covs_temp,
+        (v_lfi_temp,
+         v_s_lfi_temp,
+         v_u_lfi_temp,
+         v_fa_lfi_temp,
+         v_fa_fit_lfi_temp,
+         opt_u_covs_temp, opt_fa_covs_temp,
          stims_temp, units_temp,
-         fa_ks_temp) = dist_calculate_nulls_measures_w_rotations(
+         fa_ks_temp) = dist_calculate_nulls_lfi_w_rotations(
             X=X,
             stimuli=stimuli,
             n_dim=n_dim,
@@ -255,46 +252,21 @@ def main(args):
         if rank == 0:
             with h5py.File(save_name, 'a') as results:
                 results['v_lfi'][idx] = v_lfi_temp
-                results['v_sdkl'][idx] = v_sdkl_temp
                 results['v_s_lfi'][idx] = v_s_lfi_temp
-                results['v_s_sdkl'][idx] = v_s_sdkl_temp
                 results['v_u_lfi'][idx] = v_u_lfi_temp
-                results['v_u_sdkl'][idx] = v_u_sdkl_temp
-                results['v_r_lfi'][idx] = v_r_lfi_temp
-                results['v_r_sdkl'][idx] = v_r_sdkl_temp
                 results['v_fa_lfi'][idx] = v_fa_lfi_temp
-                results['v_fa_sdkl'][idx] = v_fa_sdkl_temp
                 results['v_fa_fit_lfi'][idx] = v_fa_fit_lfi_temp
-                results['v_fa_fit_sdkl'][idx] = v_fa_fit_sdkl_temp
                 results['p_s_lfi'][idx] = np.mean(
                     v_lfi_temp[..., np.newaxis] > v_s_lfi_temp, axis=-1
                 )
                 results['p_u_lfi'][idx] = np.mean(
                     v_lfi_temp[..., np.newaxis] > v_u_lfi_temp, axis=-1
                 )
-                results['p_r_lfi'][idx] = np.mean(
-                    v_lfi_temp[..., np.newaxis] > v_r_lfi_temp, axis=-1
-                )
                 results['p_fa_lfi'][idx] = np.mean(
                     v_lfi_temp[..., np.newaxis] > v_fa_lfi_temp, axis=-1
-                )
-                results['p_s_sdkl'][idx] = np.mean(
-                    v_sdkl_temp[..., np.newaxis] > v_s_sdkl_temp, axis=-1
-                )
-                results['p_u_sdkl'][idx] = np.mean(
-                    v_sdkl_temp[..., np.newaxis] > v_u_sdkl_temp, axis=-1
-                )
-                results['p_r_sdkl'][idx] = np.mean(
-                    v_sdkl_temp[..., np.newaxis] > v_r_sdkl_temp, axis=-1
-                )
-                results['p_fa_sdkl'][idx] = np.mean(
-                    v_sdkl_temp[..., np.newaxis] > v_fa_sdkl_temp, axis=-1
-                )
                 results['units'][idx, :, :n_dim] = units_temp
                 results['stims'][idx] = stims_temp
                 results['fa_ks'][idx] = fa_ks_temp
-                opt_covs_group = results['opt_covs']
-                opt_covs_group[str(n_dim)] = opt_covs_temp
                 opt_u_covs_group = results['opt_u_covs']
                 opt_u_covs_group[str(n_dim)] = opt_u_covs_temp
                 opt_fa_covs_group = results['opt_fa_covs']
