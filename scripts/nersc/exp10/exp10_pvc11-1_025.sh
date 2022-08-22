@@ -6,9 +6,9 @@
 #SBATCH --mail-user=jlivezey@lbl.gov
 #SBATCH --mail-type=ALL
 #SBATCH -t 08:00:00
-#SBATCH --image=docker:pssachdeva/neuro:latest
-#SBATCH --output=/global/homes/s/sachdeva/scripts/neurocorr/exp10/exp10_pvc11-1_025_out.o
-#SBATCH --error=/global/homes/s/sachdeva/scripts/neurocorr/exp10/exp10_pvc11-1_025_err.o
+#SBATCH --image=docker:jesselivezey/nc:latest
+#SBATCH --output=/global/cscratch1/sd/jlivezey/exp10_v1_20201015_Y35_360_out.o
+#SBATCH --error=/global/cscratch1/sd/jlivezey/exp10_v1_20201015_Y35_360_err.o
 
 export OMP_NUM_THREADS=5
 export OMP_PLACES=threads
