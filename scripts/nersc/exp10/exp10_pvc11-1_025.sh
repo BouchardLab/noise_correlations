@@ -1,22 +1,26 @@
 #!/bin/bash
-#SBATCH -N 256
-#SBATCH -C haswell
+#SBATCH -N 342
+#SBATCH -C knl
 #SBATCH -q regular
 #SBATCH -J nc
-#SBATCH --mail-user=pratik.sachdeva@berkeley.edu
+#SBATCH --mail-user=jlivezey@lbl.gov
 #SBATCH --mail-type=ALL
-#SBATCH -t 04:00:00
+#SBATCH -t 08:00:00
 #SBATCH --image=docker:pssachdeva/neuro:latest
-#SBATCH --output=/global/homes/s/sachdeva/scripts/neurocorr/exp10/exp10_pvc11-1_out.o
-#SBATCH --error=/global/homes/s/sachdeva/scripts/neurocorr/exp10/exp10_pvc11-1_err.o
+#SBATCH --output=/global/homes/s/sachdeva/scripts/neurocorr/exp10/exp10_pvc11-1_025_out.o
+#SBATCH --error=/global/homes/s/sachdeva/scripts/neurocorr/exp10/exp10_pvc11-1_025_err.o
 
-srun -n 4096 -c 2 shifter \
+export OMP_NUM_THREADS=5
+export OMP_PLACES=threads
+export OMP_PROC_BIND=true
+
+srun -n 4104 -c 20 shifter \
     python -u $HOME/noise_correlations/scripts/discrim_null_model_analysis.py \
     --data_path=/global/cscratch1/sd/sachdeva/data/pvc11/monkey1.mat \
     --rotation_path=/global/cscratch1/sd/sachdeva/neurocorr/rotations.h5 \
     --correlation_path=/global/cscratch1/sd/sachdeva/neurocorr/correlations.h5 \
     --save_folder=/global/cscratch1/sd/sachdeva/neurocorr/exp10 \
-    --save_tag=exp10_1 \
+    --save_tag=exp10_1_025 \
     --dataset=pvc11 \
     --dim_min=3 \
     --dim_max=20 \
