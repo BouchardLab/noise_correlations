@@ -258,7 +258,8 @@ def main(args):
             n_stims_per_dimlet=args.n_stims_per_dimlet,
             verbose=args.inner_loop_verbose,
             stim_transform=stim_transform,
-            k=None)
+            k=None,
+            frac=args.frac)
 
         if rank == 0:
             with h5py.File(save_name, 'a') as results:
@@ -314,6 +315,7 @@ if __name__ == '__main__':
     parser.add_argument('--peak_response', type=float, default=10.)
     parser.add_argument('--min_modulation', type=float, default=2.)
     parser.add_argument('--modulation_frac', type=float, default=0.5)
+    parser.add_argument('--frac', type=float, default=1.0)
     parser.add_argument('--random_seed', '-rs', type=int, default=0)
     parser.add_argument('--limit_stim', action='store_false')
     parser.add_argument('--transform')

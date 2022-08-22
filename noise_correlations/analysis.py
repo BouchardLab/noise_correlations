@@ -496,7 +496,7 @@ def inner_calculate_nulls_measures(
 
 def inner_calculate_nulls_lfi(
     X, stimuli, unit_idxs, stim_vals, Rs, corrs, rng, k, circular_stim=False,
-    stim_transform=None
+    stim_transform=None, frac=1.0
 ):
     """Calculates values of metrics on a dimlet of a neural design matrix under
     both the shuffled and rotation null models.
@@ -538,6 +538,9 @@ def inner_calculate_nulls_lfi(
     stim1_idx = np.argwhere(stimuli == stim_vals[1]).ravel()
     X0 = X[stim0_idx][:, unit_idxs]
     X1 = X[stim1_idx][:, unit_idxs]
+    if frac < 1.0:
+        X0 = X0[rng.choice(len(X0), size=int(np.ceil(frac*len(X0))))]
+        X1 = X1[rng.choice(len(X0), size=int(np.ceil(frac*len(X1))))]
     # Sub-design matrix statistics
     mu0, cov0 = mean_cov(X0)
     mu1, cov1 = mean_cov(X1)
@@ -1098,7 +1101,7 @@ def dist_calculate_nulls_measures_w_rotations(
 def dist_calculate_nulls_lfi_w_rotations(
     X, stimuli, n_dim, n_dimlets, Rs, R_idxs, corrs, corr_idxs, rng, comm,
     circular_stim=False, all_stim=True, unordered=False, n_stims_per_dimlet=None,
-    verbose=False, stim_transform=None, k=None
+    verbose=False, stim_transform=None, k=None, frac=1.0
 ):
     """Calculates null model distributions for linear Fisher information and
     symmetric KL-divergence, in a distributed manner.
@@ -1235,7 +1238,8 @@ def dist_calculate_nulls_lfi_w_rotations(
                 rng=rng,
                 circular_stim=circular_stim,
                 stim_transform=stim_transform,
-                k=k)
+                k=k,
+                frac=frac)
 
     # Gather measures across ranks
     v_lfi = Gatherv_rows(v_lfi, comm)
