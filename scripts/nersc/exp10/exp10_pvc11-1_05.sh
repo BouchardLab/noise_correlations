@@ -1,4 +1,3 @@
-
 #!/bin/bash
 #SBATCH -N 342
 #SBATCH -C knl

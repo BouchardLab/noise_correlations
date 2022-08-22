@@ -6,6 +6,7 @@ import h5py
 import numpy as np
 import os
 import time
+import glob
 from pathlib import Path
 
 from mpi4py import MPI
@@ -133,8 +134,12 @@ def main(args):
         date = date_anim.split('_')[0]
         files = []
         for sess in sessions:
-            fname = f'ROI_{date}AllTif_RM_{sess}_Intensity_unweighted_s2p_NpMethod1_Coe0.75_Exclusion_NpSize30.mat'
-            files.append(os.path.join(data_path, date_anim, depth, sess, fname))
+            local_path = os.path.join(data_path, date_anim, depth, sess)
+            fnames = glob.glob(os.path.join(local_path, '*NpMethod1*.mat'))
+            if len(fnames) != 1:
+                raise ValueError(f'Found wrong number of NpMethod1 files: {local_path}')
+            fname = fnames[0]
+            files.append(fname)
         if rank == 0:
             pack = packs.V1(data_path=files)
             # get design matrix and stimuli
