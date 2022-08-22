@@ -539,8 +539,8 @@ def inner_calculate_nulls_lfi(
     X0 = X[stim0_idx][:, unit_idxs]
     X1 = X[stim1_idx][:, unit_idxs]
     if frac < 1.0:
-        X0 = X0[rng.choice(len(X0), size=int(np.ceil(frac*len(X0))))]
-        X1 = X1[rng.choice(len(X0), size=int(np.ceil(frac*len(X1))))]
+        X0 = X0[rng.choice(len(X0), replace=False, size=int(np.ceil(frac * len(X0))))]
+        X1 = X1[rng.choice(len(X0), replace=False, size=int(np.ceil(frac * len(X1))))]
     # Sub-design matrix statistics
     mu0, cov0 = mean_cov(X0)
     mu1, cov1 = mean_cov(X1)
