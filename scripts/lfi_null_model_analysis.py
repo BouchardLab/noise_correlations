@@ -6,7 +6,6 @@ import h5py
 import numpy as np
 import os
 import time
-import glob
 from pathlib import Path
 
 from mpi4py import MPI
@@ -134,12 +133,8 @@ def main(args):
         date = date_anim.split('_')[0]
         files = []
         for sess in sessions:
-            local_path = os.path.join(data_path, date_anim, depth, sess)
-            fnames = glob.glob(os.path.join(local_path, '*NpMethod1*.mat'))
-            if len(fnames) != 1:
-                raise ValueError(f'Found wrong number of NpMethod1 files: {local_path}')
-            fname = fnames[0]
-            files.append(fname)
+            fname = f'ROI_{date}AllTif_RM_{sess}_Intensity_unweighted_s2p_NpMethod1_Coe0.75_Exclusion_NpSize30.mat'
+            files.append(os.path.join(data_path, date_anim, depth, sess, fname))
         if rank == 0:
             pack = packs.V1(data_path=files)
             # get design matrix and stimuli
@@ -168,6 +163,8 @@ def main(args):
             )
         if circular_stim:
             print('Dataset has circular stim.')
+        if args.frac < 1.0:
+            pass
 
     # Broadcast design matrix and stimuli
     X = Bcast_from_root(X, comm)
@@ -187,6 +184,11 @@ def main(args):
     else:
         n_dim_stims = n_dimlets
 
+    R_idxs = None
+    corr_idxs = None
+    if rank == 0:
+        R_idxs = None
+        corr_idxs = None
     R_idxs = None
     corr_idxs = None
     if rank == 0:
@@ -274,9 +276,6 @@ def main(args):
                 results['v_fa_lfi'][idx] = v_fa_lfi_temp
                 results['v_fa_fit_lfi'][idx] = v_fa_fit_lfi_temp
                 results['p_s_lfi'][idx] = np.mean(
-                    v_lfi_temp[..., np.newaxis] > v_s_lfi_temp, axis=-1
-                )
-                results['p_u_lfi'][idx] = np.mean(
                     v_lfi_temp[..., np.newaxis] > v_u_lfi_temp, axis=-1
                 )
                 results['p_fa_lfi'][idx] = np.mean(
