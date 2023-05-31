@@ -205,6 +205,7 @@ def main(args):
             save_name = save_tag + '_' + save_name
         save_name = os.path.join(save_folder, save_name)
         with h5py.File(save_name, 'w') as results:
+            opt_covs_group = results.create_group('opt_covs')
             opt_u_covs_group = results.create_group('opt_u_covs')
             opt_fa_covs_group = results.create_group('opt_fa_covs')
             # Observed measures in neural data
@@ -265,17 +266,11 @@ def main(args):
         if rank == 0:
             with h5py.File(save_name, 'a') as results:
                 results['v_lfi'][idx] = v_lfi_temp
-                results['v_sdkl'][idx] = v_sdkl_temp
                 results['v_s_lfi'][idx] = v_s_lfi_temp
-                results['v_s_sdkl'][idx] = v_s_sdkl_temp
                 results['v_u_lfi'][idx] = v_u_lfi_temp
-                results['v_u_sdkl'][idx] = v_u_sdkl_temp
                 results['v_r_lfi'][idx] = v_r_lfi_temp
-                results['v_r_sdkl'][idx] = v_r_sdkl_temp
                 results['v_fa_lfi'][idx] = v_fa_lfi_temp
-                results['v_fa_sdkl'][idx] = v_fa_sdkl_temp
                 results['v_fa_fit_lfi'][idx] = v_fa_fit_lfi_temp
-                results['v_fa_fit_sdkl'][idx] = v_fa_fit_sdkl_temp
                 results['p_s_lfi'][idx] = np.mean(
                     v_lfi_temp[..., np.newaxis] > v_s_lfi_temp, axis=-1
                 )
@@ -287,18 +282,6 @@ def main(args):
                 )
                 results['p_fa_lfi'][idx] = np.mean(
                     v_lfi_temp[..., np.newaxis] > v_fa_lfi_temp, axis=-1
-                )
-                results['p_s_sdkl'][idx] = np.mean(
-                    v_sdkl_temp[..., np.newaxis] > v_s_sdkl_temp, axis=-1
-                )
-                results['p_u_sdkl'][idx] = np.mean(
-                    v_sdkl_temp[..., np.newaxis] > v_u_sdkl_temp, axis=-1
-                )
-                results['p_r_sdkl'][idx] = np.mean(
-                    v_sdkl_temp[..., np.newaxis] > v_r_sdkl_temp, axis=-1
-                )
-                results['p_fa_sdkl'][idx] = np.mean(
-                    v_sdkl_temp[..., np.newaxis] > v_fa_sdkl_temp, axis=-1
                 )
                 results['units'][idx, :, :n_dim] = units_temp
                 results['stims'][idx] = stims_temp
