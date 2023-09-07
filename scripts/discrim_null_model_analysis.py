@@ -39,13 +39,13 @@ def main(args):
     n_repeats = args.n_repeats
     # Whether all stim pairs are used for each dimlet
     all_stim = args.limit_stim
-    # Create random state
-    rng = np.random.default_rng(args.random_seed)
 
     # MPI communicator
     comm = MPI.COMM_WORLD
     size = comm.size
     rank = comm.rank
+    # Create random state
+    rng = np.random.default_rng(args.random_seed + rank)
 
     if rank == 0:
         t0 = time.time()
@@ -261,7 +261,8 @@ def main(args):
             n_stims_per_dimlet=args.n_stims_per_dimlet,
             verbose=args.inner_loop_verbose,
             stim_transform=stim_transform,
-            k=None)
+            k=None,
+            frac=args.frac)
 
         if rank == 0:
             with h5py.File(save_name, 'a') as results:
@@ -330,6 +331,7 @@ if __name__ == '__main__':
     parser.add_argument('--inner_loop_verbose', action='store_true')
     parser.add_argument('--cv_response', type=str, default='cv')
     parser.add_argument('--n_stims_per_dimlet', type=int, default=1)
+    parser.add_argument('--frac', type=float, default=1.0)
     args = parser.parse_args()
 
     main(args)

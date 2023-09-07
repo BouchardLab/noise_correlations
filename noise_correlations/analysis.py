@@ -366,7 +366,7 @@ def inner_compare_nulls_measures(X, stimuli, unit_idxs, stim_vals, rng, n_repeat
 
 def inner_calculate_nulls_measures(
     X, stimuli, unit_idxs, stim_vals, Rs, corrs, rng, k, circular_stim=False,
-    stim_transform=None
+    stim_transform=None, frac=1.
 ):
     """Calculates values of metrics on a dimlet of a neural design matrix under
     both the shuffled and rotation null models.
@@ -406,6 +406,9 @@ def inner_calculate_nulls_measures(
     # Segment design matrix according to stimuli and units
     stim0_idx = np.argwhere(stimuli == stim_vals[0]).ravel()
     stim1_idx = np.argwhere(stimuli == stim_vals[1]).ravel()
+    if frac < 1.:
+        stim0_idx = rng.choice(stim0_idx, int(stim0_idx.size * frac), replace=False)
+        stim1_idx = rng.choice(stim1_idx, int(stim1_idx.size * frac), replace=False)
     X0 = X[stim0_idx][:, unit_idxs]
     X1 = X[stim1_idx][:, unit_idxs]
     # Sub-design matrix statistics
@@ -417,9 +420,14 @@ def inner_calculate_nulls_measures(
     X01 = np.concatenate((X0 - mu0, X1 - mu1), axis=0)
     fac01 = FACov(X01, k=k)
     # Calculate optimal orientations
+    """
     opt_fa_cov = fac01.get_optimal_orientation(mu0, mu1)
     opt_u_cov = lfi_uniform_corr_opt_cov(np.diag((cov0 + cov1) / 2.), mu0, mu1, rng, n_restarts=1)
     _, opt_cov = get_optimal_orientation(mu0, mu1, cov0, cov1)
+    """
+    opt_fa_cov = np.zeros_like(cov0)
+    opt_u_cov = np.zeros_like(cov0)
+    opt_cov = np.zeros_like(cov0)
     # Calculate stimulus difference
     if circular_stim:
         dtheta = np.ediff1d(np.unique(stimuli))[0]
@@ -430,13 +438,19 @@ def inner_calculate_nulls_measures(
 
     # Calculate values of LFI and sDKL for original datasets
     v_lfi = lfi(mu0, cov0, mu1, cov1, dtheta=dtheta)
+    """
     v_sdkl = sdkl(mu0, cov0, mu1, cov1, return_trace=False)
+    """
+    v_sdkl = 0.
     # Values for measures on factor analysis fits
     mu0, cov0 = fac0.params()
     mu1, cov1 = fac1.params()
     _, cov01 = fac01.params()
     v_fa_fit_lfi = lfi(mu0, cov01, mu1, cov01, dtheta=dtheta)
+    """
     v_fa_fit_sdkl = sdkl(mu0, cov0, mu1, cov1)
+    """
+    v_fa_fit_sdkl = 0.
     # Values for measures on shuffled data
     v_s_lfi = np.zeros(n_repeats)
     v_s_sdkl = np.zeros(n_repeats)
@@ -457,33 +471,41 @@ def inner_calculate_nulls_measures(
         X0s = shuffle_data(X0, rng=rng)
         X1s = shuffle_data(X1, rng=rng)
         v_s_lfi[jj] = lfi_data(X0s, X1s, dtheta=dtheta)
+        """
         v_s_sdkl[jj] = sdkl_data(X0s, X1s, return_trace=False)
+        """
         # Uniform correlation null model
         corr0 = corrs[jj, 0]
         corr1 = corrs[jj, 1]
         diagu = np.sqrt(np.diag((cov0 + cov1) / 2.))
         covu = corr0 * np.outer(diagu, diagu)
         v_u_lfi[jj] = lfi(mu0, covu, mu1, covu, dtheta=dtheta)
+        """
         diag0 = np.sqrt(np.diag(cov0))
         diag1 = np.sqrt(np.diag(cov1))
         cov0u = corr0 * np.outer(diag0, diag0)
         cov1u = corr1 * np.outer(diag1, diag1)
         v_u_sdkl[jj] = sdkl(mu0, cov0u, mu1, cov1u, return_trace=False)
+        """
         # Rotation null model
         R0 = Rs[jj, 0]
+        """
         R1 = Rs[jj, 1]
         cov0r = R0 @ cov0 @ R0.T
         cov1r = R0 @ cov1 @ R0.T
         v_r_lfi[jj] = lfi(mu0, cov0r, mu1, cov1r, dtheta=dtheta)
         cov1r = R1 @ cov1 @ R1.T
         v_r_sdkl[jj] = sdkl(mu0, cov0r, mu1, cov1r, return_trace=False)
+        """
         # Factor analysis null model: LFI
         _, cov01r = fac01.params(R0)
         v_fa_lfi[jj] = lfi(mu0, cov01r, mu1, cov01r, dtheta=dtheta)
         # Factor analysis null model: sDKL
+        """
         mu0, cov0r = fac0.params(R0)
         mu1, cov1r = fac1.params(R1)
         v_fa_sdkl[jj] = sdkl(mu0, cov0r, mu1, cov1r)
+        """
     return (v_lfi, v_sdkl,
             v_s_lfi, v_s_sdkl,
             v_u_lfi, v_u_sdkl,
@@ -921,7 +943,7 @@ def dist_calculate_nulls_measures(
 def dist_calculate_nulls_measures_w_rotations(
     X, stimuli, n_dim, n_dimlets, Rs, R_idxs, corrs, corr_idxs, rng, comm,
     circular_stim=False, all_stim=True, unordered=False, n_stims_per_dimlet=None,
-    verbose=False, stim_transform=None, k=None
+    verbose=False, stim_transform=None, k=None, frac=1.
 ):
     """Calculates null model distributions for linear Fisher information and
     symmetric KL-divergence, in a distributed manner.
@@ -1030,7 +1052,7 @@ def dist_calculate_nulls_measures_w_rotations(
             with h5py.File(Rs, 'r') as rotations:
                 R_idx_unique, indices = np.unique(R_idx.ravel(), return_inverse=True)
                 # Get rotation matrices used sorted indices
-                R = rotations[str(n_dim)][R_idx_unique]
+                R = rotations[str(n_dim)][R_idx_unique.tolist()]
                 # Re-organized rotation matrices according to original order
                 R = R[np.arange(R_idx_unique.size)[indices]]
                 # Reshape rotation matrices
@@ -1042,7 +1064,7 @@ def dist_calculate_nulls_measures_w_rotations(
             with h5py.File(corrs, 'r') as correlations:
                 corr_idx_unique, indices = np.unique(corr_idx.ravel(), return_inverse=True)
                 # Get correlation matrices used sorted indices
-                corr = correlations[str(n_dim)][corr_idx_unique]
+                corr = correlations[str(n_dim)][corr_idx_unique.tolist()]
                 # Re-organized correlation matrices according to original order
                 corr = corr[np.arange(corr_idx_unique.size)[indices]]
                 # Reshape correlation matrices
@@ -1067,7 +1089,8 @@ def dist_calculate_nulls_measures_w_rotations(
                 rng=rng,
                 circular_stim=circular_stim,
                 stim_transform=stim_transform,
-                k=k)
+                k=k,
+                frac=frac)
 
     # Gather measures across ranks
     v_lfi = Gatherv_rows(v_lfi, comm)
